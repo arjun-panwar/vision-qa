@@ -1,0 +1,48 @@
+{
+    "rawDetectorOutput": [
+        {
+            "bbox": [
+                0,
+                237,
+                253,
+                376
+            ],
+            "score": 0.7578125,
+            "classIdx": 0,
+            "className": "trailer",
+            "isRejected": false,
+            "rejectReason": null
+        },
+        {
+            "bbox": [
+                505,
+                201,
+                912,
+                335
+            ],
+            "score": 0.67041015625,
+            "classIdx": 0,
+            "className": "trailer",
+            "isRejected": false,
+            "rejectReason": null
+        },
+        {
+            "bbox": [
+                0,
+                238,
+                210,
+                290
+            ],
+            "score": 0.437744140625,
+            "classIdx": 1,
+            "className": "trailer_top",
+            "isRejected": false,
+            "rejectReason": null
+        }
+    ],
+    "is_skipped": false,
+    "metadata": {
+        "frameTimestamp": "2025-12-20T18:12:33.078166+00:00",
+        "frameFilePath": "/home/arjun/work/mb/od_model_inference/temp/D20251220_T18_12_33_078166_IDX4760.jpg"
+    }
+}

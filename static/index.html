@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CV Model Comparison</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Left Sidebar: Image List -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Images</h2>
+                <button id="btn-load-project" class="btn-primary">Load Project</button>
+            </div>
+            <ul id="image-list">
+                <!-- Populated by JS -->
+            </ul>
+        </aside>
+
+        <!-- Center Stage: Image and Overlay -->
+        <main class="main-view">
+            <div id="canvas-container" class="canvas-wrapper">
+                <img id="source-image" src="" alt="Select an image" />
+                <canvas id="overlay-canvas"></canvas>
+            </div>
+        </main>
+
+        <!-- Right Control Panel -->
+        <aside class="controls">
+            <h2>Controls</h2>
+
+            <div class="control-group">
+                <h3>Models</h3>
+                <div id="model-toggles">
+                    <!-- Dynamic model toggles -->
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>Confidence Threshold</h3>
+                <div class="slider-container">
+                    <input type="range" id="conf-slider" min="0" max="1" step="0.05" value="0.5">
+                    <span id="conf-value">0.5</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>Classes</h3>
+                <div id="class-filters">
+                    <!-- Dynamic checkboxes -->
+                </div>
+            </div>
+        </aside>
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+
+</html>
