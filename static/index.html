@@ -124,19 +124,25 @@
     </div>
     <!-- QA Footer -->
     <footer class="qa-footer">
-        <div class="qa-controls">
-            <button id="btn-prev" class="qa-btn" title="Previous Image">&lt;</button>
-            <button id="btn-next" class="qa-btn" title="Next Image">&gt;</button>
-            <div style="width: 1rem;"></div> <!-- Spacer -->
-            <button class="qa-btn correct" onclick="setQAStatus('correct')">Correct</button>
-            <button class="qa-btn incorrect" onclick="setQAStatus('incorrect')">Incorrect</button>
-            <button class="qa-btn doubtful" onclick="setQAStatus('doubtful')">Doubtful</button>
+        <!-- Left: QA Controls + Comment -->
+        <div class="footer-left" style="display: flex; align-items: center; gap: 1rem; flex: 1;">
+            <div class="qa-controls">
+                <button class="qa-btn correct" onclick="setQAStatus('correct')">Correct</button>
+                <button class="qa-btn incorrect" onclick="setQAStatus('incorrect')">Incorrect</button>
+                <button class="qa-btn doubtful" onclick="setQAStatus('doubtful')">Doubtful</button>
+            </div>
+            <input type="text" id="qa-comment" class="qa-comment" placeholder="Add a comment...">
         </div>
 
-        <input type="text" id="qa-comment" class="qa-comment" placeholder="Add a comment...">
-
-        <div style="font-size: 0.8rem; color: #666;">
-            Saved: <span id="qa-saved-status">Synced</span>
+        <!-- Right: Navigation + Status -->
+        <div class="footer-right" style="display: flex; align-items: center; gap: 1rem;">
+            <div class="nav-controls">
+                <button id="btn-prev" class="qa-btn" title="Previous Image">&lt;</button>
+                <button id="btn-next" class="qa-btn" title="Next Image">&gt;</button>
+            </div>
+            <div style="font-size: 0.8rem; color: #666; white-space: nowrap;">
+                Saved: <span id="qa-saved-status">Synced</span>
+            </div>
         </div>
     </footer>
 

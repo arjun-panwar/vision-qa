@@ -292,7 +292,13 @@ input[type=range] {
 .qa-controls {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.5rem;
+}
+
+.nav-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .qa-btn {
