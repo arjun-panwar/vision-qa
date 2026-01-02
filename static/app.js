@@ -31,11 +31,20 @@ const els = {
     img: document.getElementById('source-image'),
     canvas: document.getElementById('overlay-canvas'),
     container: document.getElementById('canvas-container'),
+    mainView: document.querySelector('.main-view'),
     modelToggles: document.getElementById('model-toggles'),
     confSlider: document.getElementById('conf-slider'),
     confValue: document.getElementById('conf-value'),
     classFilters: document.getElementById('class-filters'),
-    btnLoadProject: document.getElementById('btn-load-project')
+    btnLoadProject: document.getElementById('btn-load-project'),
+
+    // Visual Settings
+    sliderThickness: document.getElementById('slider-thickness'),
+    valThickness: document.getElementById('val-thickness'),
+    sliderFontSize: document.getElementById('slider-fontsize'),
+    valFontSize: document.getElementById('val-fontsize'),
+    checkLabels: document.getElementById('check-labels'),
+    checkScores: document.getElementById('check-scores')
 };
 
 const ctx = els.canvas.getContext('2d');
@@ -192,15 +201,54 @@ function renderImageList() {
 function loadImage(filename) {
     state.currentImage = filename;
 
+    // Update active class in list
     Array.from(els.imageList.children).forEach(li => {
         li.classList.toggle('active', li.textContent === filename);
     });
 
     els.img.src = `/api/images/${filename}`;
+
+    // Reset transform (will be calculated in fitImageToScreen)
+    state.transform = { scale: 1, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 };
+    // Don't update transform yet, wait for load
+
     els.img.onload = () => {
         resizeCanvas();
+        fitImageToScreen(); // Calculate fit
         fetchAnnotations(filename);
     };
+}
+
+function fitImageToScreen() {
+    if (!els.img || !els.mainView) return;
+
+    const viewW = els.mainView.clientWidth;
+    const viewH = els.mainView.clientHeight;
+    const imgW = els.img.naturalWidth;
+    const imgH = els.img.naturalHeight;
+
+    if (imgW === 0 || imgH === 0) return;
+
+    // Add some padding (e.g., 40px visible space)
+    const availW = viewW - 40;
+    const availH = viewH - 40;
+
+    const scaleX = availW / imgW;
+    const scaleY = availH / imgH;
+
+    // Fit entire image
+    const fitScale = Math.min(scaleX, scaleY);
+
+    // Apply logic: if image is smaller than screen, maybe scale=1 is fine? 
+    // User requested "By default image should be zoomed in to the complete canvas...".
+    // "Complete canvas" usually means "fit visible area".
+    // So we use fitScale regardless of if it's < 1 or > 1 (upscale small images, downscale large).
+
+    state.transform.scale = fitScale;
+    state.transform.x = 0;
+    state.transform.y = 0;
+
+    updateTransform();
 }
 
 function resizeCanvas() {
@@ -283,8 +331,9 @@ function drawBoxes(boxes, color) {
     if (!boxes) return;
 
     ctx.strokeStyle = color;
-    ctx.lineWidth = 3; // Hardcoded or config
-    ctx.font = 'bold 20px Arial';
+    ctx.lineWidth = state.lineWidth;
+    ctx.font = `bold ${state.fontSize}px Arial`;
+    ctx.fillStyle = color;
 
     boxes.forEach(box => {
         if (!state.filters.classes.has(box.class)) return;
@@ -294,16 +343,31 @@ function drawBoxes(boxes, color) {
 
         ctx.strokeRect(x, y, w, h);
 
-        const label = `${box.class} ${box.conf.toFixed(2)}`;
+        if (state.showLabels || state.showScores) {
+            let labelText = "";
+            if (state.showLabels) labelText += box.class;
+            if (state.showScores) labelText += (labelText ? " " : "") + box.conf.toFixed(2);
 
-        ctx.save();
-        ctx.fillStyle = color;
-        const textWidth = ctx.measureText(label).width;
-        ctx.fillRect(x, y - 25, textWidth + 10, 25);
-        ctx.fillStyle = '#000';
-        ctx.fillText(label, x + 5, y - 5);
-        ctx.restore();
+            ctx.save();
+            ctx.fillStyle = color;
+            const textMetrics = ctx.measureText(labelText);
+            // Height approx based on font size
+            const textHeight = state.fontSize * 1.2;
+            const pad = 5;
+
+            ctx.fillRect(x, y - textHeight, textMetrics.width + (pad * 2), textHeight);
+
+            ctx.fillStyle = '#000';
+            ctx.fillText(labelText, x + pad, y - (textHeight * 0.2)); // Baseline tweak
+            ctx.restore();
+        }
     });
+}
+
+function updateTransform() {
+    // Apply CSS transform to the WRAPPER (container)
+    // Scale and Translate
+    els.container.style.transform = `translate(${state.transform.x}px, ${state.transform.y}px) scale(${state.transform.scale})`;
 }
 
 // -- Event Listeners --
@@ -317,12 +381,91 @@ function setupEventListeners() {
         draw();
     };
 
-    window.addEventListener('resize', () => {
-        if (state.currentImage) {
-            els.canvas.style.width = els.img.clientWidth + 'px';
-            els.canvas.style.height = els.img.clientHeight + 'px';
-        }
-    });
+    // Visual Settings
+    if (els.sliderThickness) {
+        els.sliderThickness.oninput = (e) => {
+            state.lineWidth = parseInt(e.target.value);
+            els.valThickness.textContent = state.lineWidth;
+            draw();
+        };
+    }
+    if (els.sliderFontSize) {
+        els.sliderFontSize.oninput = (e) => {
+            state.fontSize = parseInt(e.target.value);
+            els.valFontSize.textContent = state.fontSize;
+            draw();
+        };
+    }
+    if (els.checkLabels) {
+        els.checkLabels.onchange = (e) => {
+            state.showLabels = e.target.checked;
+            draw();
+        };
+    }
+    if (els.checkScores) {
+        els.checkScores.onchange = (e) => {
+            state.showScores = e.target.checked;
+            draw();
+        };
+    }
+
+    // Zoom Buttons
+    const btnZoomIn = document.getElementById('btn-zoom-in');
+    const btnZoomOut = document.getElementById('btn-zoom-out');
+    const btnResetView = document.getElementById('btn-reset-view');
+
+    if (btnZoomIn) {
+        btnZoomIn.onclick = () => {
+            state.transform.scale = Math.min(state.transform.scale * 1.2, 10);
+            updateTransform();
+        };
+    }
+    if (btnZoomOut) {
+        btnZoomOut.onclick = () => {
+            state.transform.scale = Math.max(state.transform.scale / 1.2, 0.1);
+            updateTransform();
+        };
+    }
+    if (btnResetView) {
+        btnResetView.onclick = () => {
+            state.transform.scale = 1;
+            state.transform.x = 0;
+            state.transform.y = 0;
+            updateTransform();
+        };
+    }
+
+    // Zoom / Pan on Container
+    const container = els.container;
+
+    container.onwheel = (e) => {
+        e.preventDefault();
+        const scaleAmount = -e.deltaY * 0.001;
+        state.transform.scale += scaleAmount * state.transform.scale; // Logarithmic-ish
+        // Clamp
+        state.transform.scale = Math.min(Math.max(0.1, state.transform.scale), 10);
+        updateTransform();
+    };
+
+    container.onmousedown = (e) => {
+        e.preventDefault();
+        state.transform.isDragging = true;
+        state.transform.startX = e.clientX - state.transform.x;
+        state.transform.startY = e.clientY - state.transform.y;
+        container.style.cursor = 'grabbing';
+    };
+
+    window.onmousemove = (e) => {
+        if (!state.transform.isDragging) return;
+        state.transform.x = e.clientX - state.transform.startX;
+        state.transform.y = e.clientY - state.transform.startY;
+        updateTransform();
+    };
+
+    window.onmouseup = () => {
+        state.transform.isDragging = false;
+        container.style.cursor = 'grab';
+    };
 
     const ro = new ResizeObserver(() => {
         if (!els.img) return;
