@@ -62,7 +62,7 @@ body {
     height: 100%;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-end;
     /* Center the buttons */
     border-left: 1px solid var(--border);
     padding: 0 1rem;
@@ -95,6 +95,14 @@ body {
     display: flex;
     flex-direction: column;
     padding: 1rem;
+    transition: width 0.3s ease, padding 0.3s ease, border 0.3s ease;
+    overflow: hidden;
+}
+
+.sidebar.collapsed {
+    width: 0;
+    padding: 0;
+    border-right: none;
 }
 
 .sidebar-header {
@@ -125,6 +133,20 @@ body {
 
 .btn-primary:hover {
     background-color: #357abd;
+}
+
+.btn-icon {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0 5px;
+    transition: color 0.2s;
+}
+
+.btn-icon:hover {
+    color: var(--accent);
 }
 
 #image-list {
@@ -203,6 +225,13 @@ body {
     border-left: 1px solid var(--border);
     padding: 1rem;
     overflow-y: auto;
+    transition: width 0.3s ease, padding 0.3s ease, border 0.3s ease;
+}
+
+.controls.collapsed {
+    width: 0;
+    padding: 0;
+    border-left: none;
 }
 
 .controls h2 {
