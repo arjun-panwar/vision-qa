@@ -22,7 +22,14 @@ const state = {
     confidence: 0.35, // Default from config prompt
 
     // Counts per class: { className: count }
-    classCounts: {}
+    classCounts: {},
+
+    // Visual Settings Defaults
+    lineWidth: 2,
+    fontSize: 20,
+    showLabels: true,
+    showScores: true,
+    transform: { scale: 1, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 }
 };
 
 // DOM Elements
@@ -351,14 +358,24 @@ function drawBoxes(boxes, color) {
             ctx.save();
             ctx.fillStyle = color;
             const textMetrics = ctx.measureText(labelText);
-            // Height approx based on font size
             const textHeight = state.fontSize * 1.2;
             const pad = 5;
+            const textWidth = textMetrics.width + (pad * 2);
 
-            ctx.fillRect(x, y - textHeight, textMetrics.width + (pad * 2), textHeight);
+            // Smart Positioning: If box is at top, draw label inside/below
+            let lblY = y - textHeight;
+            let textY = y - (textHeight * 0.2);
+
+            if (y < textHeight) {
+                // Not enough space above, draw inside at top
+                lblY = y;
+                textY = y + textHeight - (textHeight * 0.2);
+            }
+
+            ctx.fillRect(x, lblY, textWidth, textHeight);
 
             ctx.fillStyle = '#000';
-            ctx.fillText(labelText, x + pad, y - (textHeight * 0.2)); // Baseline tweak
+            ctx.fillText(labelText, x + pad, textY);
             ctx.restore();
         }
     });
