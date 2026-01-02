@@ -66,6 +66,16 @@ class ProjectState:
         # Parse global labels
         self.labels = config.get("labels", {})
         
+        # Load visualization settings (class colors)
+        self.viz_settings = {}
+        settings_path = os.path.join(self.root_dir, "viz_config.json")
+        if os.path.exists(settings_path):
+            try:
+                with open(settings_path, "r") as f:
+                    self.viz_settings = json.load(f)
+            except Exception as e:
+                print(f"Failed to load viz_settings: {e}")
+
         # Parse models dynamically
         self.models = {}
         for key, val in config.items():
@@ -98,6 +108,9 @@ state = ProjectState()
 class LoadProjectRequest(BaseModel):
     path: str
 
+class SaveSettingsRequest(BaseModel):
+    settings: dict
+
 @app.get("/")
 async def read_index():
     return FileResponse("static/index.html")
@@ -111,8 +124,25 @@ async def get_config():
     return {
         "models": state.models,
         "labels": state.labels,
+        "settings": getattr(state, "viz_settings", {}),
         "loaded": state.root_dir is not None
     }
+
+@app.post("/api/project/settings")
+async def save_settings(req: SaveSettingsRequest):
+    if not state.root_dir:
+        raise HTTPException(status_code=400, detail="No project loaded")
+    
+    settings_path = os.path.join(state.root_dir, "viz_config.json")
+    try:
+        with open(settings_path, "w") as f:
+            json.dump(req.settings, f, indent=4)
+        
+        # Update in-memory state
+        state.viz_settings = req.settings
+        return {"status": "success", "message": "Settings saved"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/project/load")
 async def load_project(req: LoadProjectRequest):

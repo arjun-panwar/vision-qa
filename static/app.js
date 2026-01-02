@@ -23,6 +23,7 @@ const state = {
 
     // Counts per class: { className: count }
     classCounts: {},
+    classColors: {}, // className -> hexColor
 
     // Visual Settings Defaults
     lineWidth: 2,
@@ -71,6 +72,11 @@ async function fetchConfig() {
 
         state.modelsConfig = data.models || {};
         state.labelsConfig = data.labels || {};
+
+        // Load Settings
+        if (data.settings && data.settings.classColors) {
+            state.classColors = data.settings.classColors;
+        }
 
         // Initialize visible models (all true by default)
         Object.keys(state.modelsConfig).forEach(key => {
@@ -293,34 +299,102 @@ function renderModelToggles() {
     });
 }
 
+async function saveSettings() {
+    try {
+        await fetch('/api/project/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settings: { classColors: state.classColors } })
+        });
+    } catch (err) {
+        console.error("Failed to save settings:", err);
+    }
+}
+
+function getRandomColor() {
+    const letters = '0123456789ABCDEF';
+    let color = '#';
+    for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+    }
+    return color;
+}
+
 function renderClassFilters() {
     els.classFilters.innerHTML = '';
 
-    // Sort labels usually makes sense
-    const sortedLabels = Object.values(state.labelsConfig).sort();
+    // Union of configured labels and actually detected classes
+    const allLabels = new Set([
+        ...Object.values(state.labelsConfig),
+        ...Object.keys(state.classCounts)
+    ]);
+    const sortedLabels = Array.from(allLabels).sort();
 
     sortedLabels.forEach(cls => {
         const count = state.classCounts[cls] || 0;
 
-        const label = document.createElement('label');
+        // Ensure color exists
+        if (!state.classColors[cls]) {
+            state.classColors[cls] = getRandomColor();
+        }
+        const color = state.classColors[cls];
+
+        // Main container: Flex row, full width
+        const container = document.createElement('div');
+        container.style.display = 'flex';
+        container.style.alignItems = 'center';
+        container.style.marginBottom = '4px';
+        container.style.justifyContent = 'space-between';
+
+        // Left side: Checkbox + Class Name
+        const leftGroup = document.createElement('div');
+        leftGroup.style.display = 'flex';
+        leftGroup.style.alignItems = 'center';
+        leftGroup.style.gap = '8px'; // Space between checkbox and text
+
         const input = document.createElement('input');
         input.type = 'checkbox';
         input.checked = state.filters.classes.has(cls);
+        input.style.cursor = 'pointer';
+        // Set checkbox color to match class color
+        input.style.accentColor = color;
+
         input.onchange = (e) => {
             if (e.target.checked) state.filters.classes.add(cls);
             else state.filters.classes.delete(cls);
             draw();
         };
 
-        // Add count to label
         const span = document.createElement('span');
-        span.textContent = ` ${cls} (${count})`;
-        // Dim opacity if count is 0
+        span.textContent = `${cls} (${count})`;
+        span.style.fontSize = '0.9rem';
         if (count === 0) span.style.opacity = '0.5';
 
-        label.appendChild(input);
-        label.appendChild(span);
-        els.classFilters.appendChild(label);
+        leftGroup.appendChild(input);
+        leftGroup.appendChild(span);
+
+        // Right side: Color Picker
+        const colorPicker = document.createElement('input');
+        colorPicker.type = 'color';
+        colorPicker.value = color;
+        colorPicker.style.border = 'none';
+        colorPicker.style.width = '24px';
+        colorPicker.style.height = '24px';
+        colorPicker.style.padding = '0';
+        colorPicker.style.cursor = 'pointer';
+        colorPicker.style.background = 'none'; // Clean look
+
+        colorPicker.onchange = (e) => {
+            const newColor = e.target.value;
+            state.classColors[cls] = newColor;
+            input.style.accentColor = newColor; // Update checkbox color immediately
+            draw();
+            saveSettings();
+        };
+
+        container.appendChild(leftGroup);
+        container.appendChild(colorPicker);
+        els.classFilters.appendChild(container);
     });
 }
 
@@ -334,17 +408,21 @@ function draw() {
     });
 }
 
-function drawBoxes(boxes, color) {
+function drawBoxes(boxes, modelColor) {
     if (!boxes) return;
 
-    ctx.strokeStyle = color;
     ctx.lineWidth = state.lineWidth;
     ctx.font = `bold ${state.fontSize}px Arial`;
-    ctx.fillStyle = color;
 
     boxes.forEach(box => {
         if (!state.filters.classes.has(box.class)) return;
         if (box.conf < state.confidence) return;
+
+        // Color priority: Class Color > Model Color
+        const color = state.classColors[box.class] || modelColor;
+
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
 
         const [x, y, w, h] = box.bbox;
 
@@ -374,7 +452,7 @@ function drawBoxes(boxes, color) {
 
             ctx.fillRect(x, lblY, textWidth, textHeight);
 
-            ctx.fillStyle = '#000';
+            ctx.fillStyle = '#000'; // Black text
             ctx.fillText(labelText, x + pad, textY);
             ctx.restore();
         }
