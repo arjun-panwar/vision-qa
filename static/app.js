@@ -63,6 +63,8 @@ const els = {
     qaComment: document.getElementById('qa-comment'),
     qaSavedStatus: document.getElementById('qa-saved-status'),
     filterQA: document.getElementById('filter-qa'),
+    btnPrev: document.getElementById('btn-prev'),
+    btnNext: document.getElementById('btn-next'),
 
     // Visual Settings
     sliderThickness: document.getElementById('slider-thickness'),
@@ -339,6 +341,31 @@ function loadImage(filename) {
         fitImageToScreen();
         fetchAnnotations(filename);
     };
+}
+
+function navigateImage(offset) {
+    if (!state.images.length) {
+        console.log("No images to navigate");
+        return;
+    }
+
+    let currentIndex = state.images.indexOf(state.currentImage);
+    if (currentIndex === -1) currentIndex = 0;
+
+    const newIndex = currentIndex + offset;
+
+    // Bounds check
+    if (newIndex >= 0 && newIndex < state.images.length) {
+        loadImage(state.images[newIndex]);
+        // Scroll sidebar to keep active item in view
+        // Simple way:
+        setTimeout(() => {
+            const activeLi = els.imageList.querySelector('li.active');
+            if (activeLi) {
+                activeLi.scrollIntoView({ block: 'nearest' });
+            }
+        }, 100);
+    }
 }
 
 function fitImageToScreen() {
@@ -642,6 +669,13 @@ function setupEventListeners() {
             state.filterQA = e.target.value;
             renderImageList();
         };
+    }
+
+    if (els.btnPrev) {
+        els.btnPrev.onclick = () => navigateImage(-1);
+    }
+    if (els.btnNext) {
+        els.btnNext.onclick = () => navigateImage(1);
     }
 
     // We attach global window functions for HTML onclick if needed, but better here
