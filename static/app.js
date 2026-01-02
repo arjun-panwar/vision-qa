@@ -39,11 +39,20 @@ const state = {
     ghostOpacity: 0.2, // Default
     showLabels: true,
     showScores: true,
-    transform: { scale: 1, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 }
+    showScores: true,
+    transform: { scale: 1, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 },
+
+    // Sidebar States
+    leftSidebarOpen: true,
+    rightSidebarOpen: true
 };
 
 // DOM Elements
 const els = {
+    sidebarLeft: document.querySelector('.sidebar'),
+    sidebarRight: document.querySelector('.controls'),
+    btnToggleLeft: document.getElementById('btn-toggle-left'),
+    btnToggleRight: document.getElementById('btn-toggle-right'),
     imageList: document.getElementById('image-list'),
     img: document.getElementById('source-image'),
     canvas: document.getElementById('overlay-canvas'),
@@ -399,6 +408,22 @@ function resizeCanvas() {
     els.canvas.style.height = els.img.clientHeight + 'px';
 }
 
+function toggleSidebar(side) {
+    if (side === 'left') {
+        state.leftSidebarOpen = !state.leftSidebarOpen;
+        els.sidebarLeft.classList.toggle('collapsed', !state.leftSidebarOpen);
+    } else if (side === 'right') {
+        state.rightSidebarOpen = !state.rightSidebarOpen;
+        els.sidebarRight.classList.toggle('collapsed', !state.rightSidebarOpen);
+    }
+
+    // Wait for transition to end before refitting? Or just let it happen?
+    // Transition matches CSS (0.3s)
+    setTimeout(() => {
+        fitImageToScreen();
+    }, 350);
+}
+
 function renderModelToggles() {
     els.modelToggles.innerHTML = '';
     const keys = Object.keys(state.modelsConfig).sort();
@@ -658,6 +683,13 @@ function handleCanvasDblClick(e) {
 
 function setupEventListeners() {
     els.btnLoadProject.onclick = handleLoadProject;
+
+    if (els.btnToggleLeft) {
+        els.btnToggleLeft.onclick = () => toggleSidebar('left');
+    }
+    if (els.btnToggleRight) {
+        els.btnToggleRight.onclick = () => toggleSidebar('right');
+    }
 
     if (els.btnUnhideAll) {
         els.btnUnhideAll.onclick = () => {
