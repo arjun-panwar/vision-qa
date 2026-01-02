@@ -25,9 +25,14 @@ const state = {
     classCounts: {},
     classColors: {}, // className -> hexColor
 
+    // Hidden Boxes
+    hiddenBoxes: new Set(),
+    hoverBox: null, // Box under cursor
+
     // Visual Settings Defaults
     lineWidth: 2,
     fontSize: 20,
+    ghostOpacity: 0.2, // Default
     showLabels: true,
     showScores: true,
     transform: { scale: 1, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 }
@@ -45,12 +50,15 @@ const els = {
     confValue: document.getElementById('conf-value'),
     classFilters: document.getElementById('class-filters'),
     btnLoadProject: document.getElementById('btn-load-project'),
+    btnUnhideAll: document.getElementById('btn-unhide-all'),
 
     // Visual Settings
     sliderThickness: document.getElementById('slider-thickness'),
     valThickness: document.getElementById('val-thickness'),
     sliderFontSize: document.getElementById('slider-fontsize'),
     valFontSize: document.getElementById('val-fontsize'),
+    sliderOpacity: document.getElementById('slider-opacity'),
+    valOpacity: document.getElementById('val-opacity'),
     checkLabels: document.getElementById('check-labels'),
     checkScores: document.getElementById('check-scores')
 };
@@ -252,11 +260,6 @@ function fitImageToScreen() {
     // Fit entire image
     const fitScale = Math.min(scaleX, scaleY);
 
-    // Apply logic: if image is smaller than screen, maybe scale=1 is fine? 
-    // User requested "By default image should be zoomed in to the complete canvas...".
-    // "Complete canvas" usually means "fit visible area".
-    // So we use fitScale regardless of if it's < 1 or > 1 (upscale small images, downscale large).
-
     state.transform.scale = fitScale;
     state.transform.x = 0;
     state.transform.y = 0;
@@ -401,7 +404,10 @@ function renderClassFilters() {
 function draw() {
     ctx.clearRect(0, 0, els.canvas.width, els.canvas.height);
 
-    Object.keys(state.modelsConfig).forEach(key => {
+    // SORT KEYS for Consistent Z-Order
+    const sortedKeys = Object.keys(state.modelsConfig).sort();
+
+    sortedKeys.forEach(key => {
         if (state.visibleModels[key]) {
             drawBoxes(state.annotations[key], state.modelsConfig[key].renderColor);
         }
@@ -418,34 +424,56 @@ function drawBoxes(boxes, modelColor) {
         if (!state.filters.classes.has(box.class)) return;
         if (box.conf < state.confidence) return;
 
-        // Color priority: Class Color > Model Color
-        const color = state.classColors[box.class] || modelColor;
+        const isHidden = state.hiddenBoxes.has(box);
+        const isHovered = (box === state.hoverBox);
 
-        ctx.strokeStyle = color;
-        ctx.fillStyle = color;
+        // Color priority: Class Color > Model Color
+        let color = state.classColors[box.class] || modelColor;
+
+        ctx.save();
+
+        if (isHidden) {
+            // Apply GHOST Opacity
+            ctx.globalAlpha = state.ghostOpacity;
+            ctx.strokeStyle = '#888'; // Grayish
+            ctx.fillStyle = 'transparent';
+        } else {
+            ctx.globalAlpha = 1.0;
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+        }
+
+        if (isHovered) {
+            ctx.lineWidth = state.lineWidth + 2; // Highlight
+            if (isHidden) {
+                ctx.strokeStyle = '#fff'; // Bright for ghost hover
+                ctx.globalAlpha = state.ghostOpacity + 0.3; // Slightly more visible on hover
+            }
+        } else {
+            ctx.lineWidth = state.lineWidth;
+        }
 
         const [x, y, w, h] = box.bbox;
 
         ctx.strokeRect(x, y, w, h);
 
-        if (state.showLabels || state.showScores) {
+        // Only draw Labels/Scores if NOT Hidden
+        if (!isHidden && (state.showLabels || state.showScores)) {
             let labelText = "";
             if (state.showLabels) labelText += box.class;
             if (state.showScores) labelText += (labelText ? " " : "") + box.conf.toFixed(2);
 
-            ctx.save();
-            ctx.fillStyle = color;
+            ctx.fillStyle = color; // Label background matches class color
             const textMetrics = ctx.measureText(labelText);
             const textHeight = state.fontSize * 1.2;
             const pad = 5;
             const textWidth = textMetrics.width + (pad * 2);
 
-            // Smart Positioning: If box is at top, draw label inside/below
+            // Smart Positioning
             let lblY = y - textHeight;
             let textY = y - (textHeight * 0.2);
 
             if (y < textHeight) {
-                // Not enough space above, draw inside at top
                 lblY = y;
                 textY = y + textHeight - (textHeight * 0.2);
             }
@@ -454,21 +482,88 @@ function drawBoxes(boxes, modelColor) {
 
             ctx.fillStyle = '#000'; // Black text
             ctx.fillText(labelText, x + pad, textY);
-            ctx.restore();
         }
+
+        ctx.restore();
     });
 }
 
 function updateTransform() {
     // Apply CSS transform to the WRAPPER (container)
-    // Scale and Translate
     els.container.style.transform = `translate(${state.transform.x}px, ${state.transform.y}px) scale(${state.transform.scale})`;
+}
+
+function getBoxAt(x, y, onlyVisible = false) {
+    let hitBox = null;
+
+    // SORT KEYS for Consistent Z-Order (Must match draw() order!)
+    const sortedKeys = Object.keys(state.modelsConfig).sort();
+
+    sortedKeys.forEach(key => {
+        if (!state.visibleModels[key]) return;
+        const boxes = state.annotations[key];
+        if (!boxes) return;
+
+        boxes.forEach(box => {
+            if (!state.filters.classes.has(box.class)) return;
+            if (box.conf < state.confidence) return;
+
+            // "Ghost Mode": Hidden boxes are interactive for unhiding (dblclick)
+            if (onlyVisible && state.hiddenBoxes.has(box)) return;
+
+            const [bx, by, bw, bh] = box.bbox;
+            if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) {
+                hitBox = box; // Updates to latest (topmost) match
+            }
+        });
+    });
+    return hitBox;
+}
+
+function handleCanvasClick(e) {
+    const rect = els.canvas.getBoundingClientRect();
+    const scaleX = els.canvas.width / rect.width;
+    const scaleY = els.canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    // Single Click: Hide Visible Box
+    const box = getBoxAt(x, y, true);
+    if (box) {
+        state.hiddenBoxes.add(box);
+        draw();
+    }
+}
+
+function handleCanvasDblClick(e) {
+    const rect = els.canvas.getBoundingClientRect();
+    const scaleX = els.canvas.width / rect.width;
+    const scaleY = els.canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    // Double Click: Unhide Box
+    // Use getBoxAt which returns exact TOPMOST item (Visible or Ghost).
+    // This matches what the user sees highlighted.
+    const box = getBoxAt(x, y, false);
+
+    if (box && state.hiddenBoxes.has(box)) {
+        state.hiddenBoxes.delete(box);
+        draw();
+    }
 }
 
 // -- Event Listeners --
 
 function setupEventListeners() {
     els.btnLoadProject.onclick = handleLoadProject;
+
+    if (els.btnUnhideAll) {
+        els.btnUnhideAll.onclick = () => {
+            state.hiddenBoxes.clear();
+            draw();
+        };
+    }
 
     els.confSlider.oninput = (e) => {
         state.confidence = parseFloat(e.target.value);
@@ -491,6 +586,14 @@ function setupEventListeners() {
             draw();
         };
     }
+    if (els.sliderOpacity) {
+        els.sliderOpacity.oninput = (e) => {
+            state.ghostOpacity = parseFloat(e.target.value);
+            if (els.valOpacity) els.valOpacity.textContent = state.ghostOpacity;
+            draw();
+        };
+    }
+
     if (els.checkLabels) {
         els.checkLabels.onchange = (e) => {
             state.showLabels = e.target.checked;
@@ -530,14 +633,20 @@ function setupEventListeners() {
         };
     }
 
-    // Zoom / Pan on Container
+    // Zoom / Pan / Click
     const container = els.container;
+    let rawStartX = 0;
+    let rawStartY = 0;
+
+    container.ondblclick = (e) => {
+        e.preventDefault();
+        handleCanvasDblClick(e);
+    };
 
     container.onwheel = (e) => {
         e.preventDefault();
         const scaleAmount = -e.deltaY * 0.001;
-        state.transform.scale += scaleAmount * state.transform.scale; // Logarithmic-ish
-        // Clamp
+        state.transform.scale += scaleAmount * state.transform.scale;
         state.transform.scale = Math.min(Math.max(0.1, state.transform.scale), 10);
         updateTransform();
     };
@@ -547,17 +656,47 @@ function setupEventListeners() {
         state.transform.isDragging = true;
         state.transform.startX = e.clientX - state.transform.x;
         state.transform.startY = e.clientY - state.transform.y;
+
+        rawStartX = e.clientX;
+        rawStartY = e.clientY;
+
         container.style.cursor = 'grabbing';
     };
 
     window.onmousemove = (e) => {
+        if (!state.transform.isDragging) {
+            const rect = els.canvas.getBoundingClientRect();
+            if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                const scaleX = els.canvas.width / rect.width;
+                const scaleY = els.canvas.height / rect.height;
+                const x = (e.clientX - rect.left) * scaleX;
+                const y = (e.clientY - rect.top) * scaleY;
+
+                const box = getBoxAt(x, y, false);
+                if (box !== state.hoverBox) {
+                    state.hoverBox = box;
+                    draw();
+                }
+            } else if (state.hoverBox) {
+                state.hoverBox = null;
+                draw();
+            }
+        }
+
         if (!state.transform.isDragging) return;
         state.transform.x = e.clientX - state.transform.startX;
         state.transform.y = e.clientY - state.transform.startY;
         updateTransform();
     };
 
-    window.onmouseup = () => {
+    window.onmouseup = (e) => {
+        if (state.transform.isDragging) {
+            const dist = Math.abs(e.clientX - rawStartX) + Math.abs(e.clientY - rawStartY);
+            if (dist < 5) {
+                handleCanvasClick(e);
+            }
+        }
+
         state.transform.isDragging = false;
         container.style.cursor = 'grab';
     };
