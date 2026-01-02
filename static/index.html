@@ -5,16 +5,63 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CV Model Comparison</title>
-    <link rel="stylesheet" href="/static/style.css?v=9">
+    <link rel="stylesheet" href="/static/style.css?v=12">
 </head>
 
 <body>
-    <div class="container">
+    <!-- Top Bar: Title, Center Controls, Right Actions -->
+    <header class="top-bar">
+        <!-- Left: Application Name -->
+        <div class="top-bar-left">
+            Vision Buzz
+        </div>
+
+        <!-- Center: Zoom & Visual Settings -->
+        <div class="top-bar-center">
+            <div class="top-bar-group">
+                <h3>Zoom</h3>
+                <div style="display: flex; gap: 5px;">
+                    <button id="btn-zoom-in" class="btn-primary">+</button>
+                    <button id="btn-zoom-out" class="btn-primary">-</button>
+                    <button id="btn-reset-view" class="btn-primary">Reset</button>
+                </div>
+            </div>
+
+            <div class="top-bar-group" style="padding-left: 2rem; border-left: 1px solid var(--border); gap: 1.5rem;">
+                <h3>Visuals</h3>
+
+                <div class="slider-container" style="min-width: 180px; display: flex; align-items: center; gap: 8px;">
+                    <label style="font-size: 0.9rem; white-space: nowrap;">Thick:</label>
+                    <input type="range" id="slider-thickness" min="1" max="10" value="2" style="flex: 1;">
+                    <span id="val-thickness" style="width: 20px; text-align: right;">2</span>
+                </div>
+
+                <div class="slider-container" style="min-width: 180px; display: flex; align-items: center; gap: 8px;">
+                    <label style="font-size: 0.9rem; white-space: nowrap;">Font:</label>
+                    <input type="range" id="slider-fontsize" min="10" max="40" value="20" style="flex: 1;">
+                    <span id="val-fontsize" style="width: 25px; text-align: right;">20</span>
+                </div>
+
+                <label class="checkbox-label" style="margin-bottom: 0; white-space: nowrap;">
+                    <input type="checkbox" id="check-labels" checked> Labels
+                </label>
+                <label class="checkbox-label" style="margin-bottom: 0; white-space: nowrap;">
+                    <input type="checkbox" id="check-scores" checked> Scores
+                </label>
+            </div>
+        </div>
+
+        <!-- Right: Actions -->
+        <div class="top-bar-right">
+            <button id="btn-load-project" class="btn-primary" style="width: 100%;">Load Project</button>
+        </div>
+    </header>
+
+    <div class="main-layout">
         <!-- Left Sidebar: Image List -->
         <aside class="sidebar">
-            <div class="sidebar-header">
+            <div class="sidebar-header" style="justify-content: center;">
                 <h2>Images</h2>
-                <button id="btn-load-project" class="btn-primary">Load Project</button>
             </div>
             <ul id="image-list">
                 <!-- Populated by JS -->
@@ -41,34 +88,6 @@
             </div>
 
             <div class="control-group">
-                <h3>Zoom & Pan</h3>
-                <div class="button-row" style="display: flex; gap: 5px; margin-bottom: 10px;">
-                    <button id="btn-zoom-in" class="btn-primary" style="flex:1;">+</button>
-                    <button id="btn-zoom-out" class="btn-primary" style="flex:1;">-</button>
-                    <button id="btn-reset-view" class="btn-primary" style="flex:1;">Reset</button>
-                </div>
-                <p style="font-size: 0.8rem; color: #a0a0a0; margin: 0;">Use Mouse Wheel to Zoom, Drag to Pan.</p>
-            </div>
-
-            <div class="control-group">
-                <h3>Visual Settings</h3>
-                <div class="slider-container">
-                    <label>Box Thickness: <span id="val-thickness">2</span>px</label>
-                    <input type="range" id="slider-thickness" min="1" max="10" value="2">
-                </div>
-                <div class="slider-container" style="margin-top: 10px;">
-                    <label>Font Size: <span id="val-fontsize">20</span>px</label>
-                    <input type="range" id="slider-fontsize" min="10" max="40" value="20">
-                </div>
-                <label class="checkbox-label" style="margin-top: 10px;">
-                    <input type="checkbox" id="check-labels" checked> Show Class Labels
-                </label>
-                <label class="checkbox-label">
-                    <input type="checkbox" id="check-scores" checked> Show Scores
-                </label>
-            </div>
-
-            <div class="control-group">
                 <h3>Confidence Threshold</h3>
                 <div class="slider-container">
                     <input type="range" id="conf-slider" min="0" max="1" step="0.05" value="0.35">
@@ -84,7 +103,7 @@
             </div>
         </aside>
     </div>
-    <script src="/static/app.js?v=9"></script>
+    <script src="/static/app.js?v=11"></script>
 </body>
 
 </html>
