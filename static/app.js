@@ -13,6 +13,10 @@ const state = {
     // labels config: loaded from backend {id: name}
     labelsConfig: {},
 
+    // QA Data: { filename: { status: 'correct'|'incorrect'|'doubtful', comment: '...' } }
+    qaData: {},
+    filterQA: 'all', // all, unreviewed, correct, incorrect, doubtful
+
     // UI selections
     filters: {
         classes: new Set() // stores Class Names
@@ -52,6 +56,14 @@ const els = {
     btnLoadProject: document.getElementById('btn-load-project'),
     btnUnhideAll: document.getElementById('btn-unhide-all'),
 
+    // QA Elements
+    qaCorrect: document.querySelector('.qa-btn.correct'),
+    qaIncorrect: document.querySelector('.qa-btn.incorrect'),
+    qaDoubtful: document.querySelector('.qa-btn.doubtful'),
+    qaComment: document.getElementById('qa-comment'),
+    qaSavedStatus: document.getElementById('qa-saved-status'),
+    filterQA: document.getElementById('filter-qa'),
+
     // Visual Settings
     sliderThickness: document.getElementById('slider-thickness'),
     valThickness: document.getElementById('val-thickness'),
@@ -69,7 +81,8 @@ const ctx = els.canvas.getContext('2d');
 
 async function init() {
     await fetchConfig();
-    await fetchImageList();
+    await fetchImageList(); // Also fetches QA data implicitly if tied, but we'll fetch QA separately first
+    await fetchQAStatus();
     setupEventListeners();
 }
 
@@ -109,24 +122,17 @@ async function fetchConfig() {
 
 async function handleLoadProject() {
     try {
-        // 1. Ask server to open browser
         const browseRes = await fetch('/api/system/browse');
         const browseData = await browseRes.json();
 
         if (browseData.error) {
-            // Fallback: prompt user for path if server cannot open dialog
-            const manualPath = prompt("Server could not open file dialog.\nPlease enter absolute path to project folder:", "");
-            if (manualPath) {
-                loadProjectFunc(manualPath);
-            } else {
-                alert(browseData.error);
-            }
+            const manualPath = prompt("Enter absolute path to project folder:", "");
+            if (manualPath) loadProjectFunc(manualPath);
+            else alert(browseData.error);
             return;
         }
 
         if (browseData.cancelled) return;
-
-        // 2. Load the project
         await loadProjectFunc(browseData.path);
 
     } catch (err) {
@@ -151,8 +157,9 @@ async function loadProjectFunc(path) {
         const data = await res.json();
         alert(`Successfully loaded: ${data.message}`);
 
-        // Refresh
         state.currentImage = null;
+        state.qaData = {};
+        await fetchQAStatus();
         await fetchImageList();
 
     } catch (err) {
@@ -160,6 +167,82 @@ async function loadProjectFunc(path) {
         alert(`Load Project Failed: ${err.message}`);
     }
 }
+
+// -- QA Logic --
+
+async function fetchQAStatus() {
+    try {
+        const res = await fetch('/api/qa/load');
+        if (res.ok) {
+            state.qaData = await res.json();
+            renderImageList();
+        }
+    } catch (err) {
+        console.error("Failed to load QA status:", err);
+    }
+}
+
+async function setQAStatus(status) {
+    if (!state.currentImage) return;
+
+    // Toggle logic: if clicking same status, un-set it? No, explicit 'correct'/'incorrect' usually sticks.
+    // Let's allow switching. To clear, maybe we need a clear button? 
+    // For now, simple switch.
+
+    updateQAState(status, els.qaComment.value);
+}
+
+async function updateQAState(status, comment) {
+    if (!state.currentImage) return;
+
+    // Optimistic Update
+    state.qaData[state.currentImage] = { status, comment };
+    updateQAUI();
+    renderImageList(); // Update sidebar icon/color
+
+    els.qaSavedStatus.textContent = "Saving...";
+
+    try {
+        const res = await fetch('/api/qa/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                image: state.currentImage,
+                status: status,
+                comment: comment
+            })
+        });
+
+        if (res.ok) {
+            els.qaSavedStatus.textContent = "Saved";
+            setTimeout(() => els.qaSavedStatus.textContent = "Synced", 2000);
+        } else {
+            els.qaSavedStatus.textContent = "Error!";
+        }
+    } catch (err) {
+        console.error("QA Save Failed:", err);
+        els.qaSavedStatus.textContent = "Error!";
+    }
+}
+
+function updateQAUI() {
+    if (!state.currentImage) {
+        els.qaCorrect.classList.remove('active');
+        els.qaIncorrect.classList.remove('active');
+        els.qaDoubtful.classList.remove('active');
+        els.qaComment.value = "";
+        return;
+    }
+
+    const data = state.qaData[state.currentImage] || { status: null, comment: "" };
+
+    els.qaCorrect.classList.toggle('active', data.status === 'correct');
+    els.qaIncorrect.classList.toggle('active', data.status === 'incorrect');
+    els.qaDoubtful.classList.toggle('active', data.status === 'doubtful');
+
+    els.qaComment.value = data.comment || "";
+}
+
 
 // -- API Interaction --
 
@@ -170,8 +253,10 @@ async function fetchImageList() {
         state.images = data.images;
         renderImageList();
 
-        if (state.images.length > 0) {
+        if (state.images.length > 0 && !state.currentImage) {
             loadImage(state.images[0]);
+        } else if (state.currentImage) {
+            // reload current (e.g. annotations might have changed? unlikely but ok)
         } else {
             els.img.src = "";
         }
@@ -188,7 +273,6 @@ async function fetchAnnotations(filename) {
 
         // Calculate Counts
         state.classCounts = {};
-        // Initialize all known labels to 0
         Object.values(state.labelsConfig).forEach(lbl => state.classCounts[lbl] = 0);
 
         Object.entries(data).forEach(([modelKey, boxes]) => {
@@ -199,7 +283,7 @@ async function fetchAnnotations(filename) {
             });
         });
 
-        renderClassFilters(); // Update counts
+        renderClassFilters();
         draw();
     } catch (err) {
         console.error("Failed to fetch annotations:", err);
@@ -210,11 +294,29 @@ async function fetchAnnotations(filename) {
 
 function renderImageList() {
     els.imageList.innerHTML = '';
+
+    const filter = state.filterQA;
+
     state.images.forEach(imgName => {
+        const qa = state.qaData[imgName];
+        const status = qa ? qa.status : 'unreviewed';
+
+        // Filter Logic
+        if (filter !== 'all') {
+            if (filter === 'unreviewed' && status !== 'unreviewed') return;
+            if (filter !== 'unreviewed' && status !== filter) return;
+        }
+
         const li = document.createElement('li');
         li.textContent = imgName;
         li.onclick = () => loadImage(imgName);
         if (state.currentImage === imgName) li.classList.add('active');
+
+        // Add QA Class
+        if (status && status !== 'unreviewed') {
+            li.classList.add(`qa-${status}`);
+        }
+
         els.imageList.appendChild(li);
     });
 }
@@ -222,20 +324,19 @@ function renderImageList() {
 function loadImage(filename) {
     state.currentImage = filename;
 
-    // Update active class in list
-    Array.from(els.imageList.children).forEach(li => {
-        li.classList.toggle('active', li.textContent === filename);
-    });
+    // Reset hidden boxes on image change? Yes usually
+    state.hiddenBoxes.clear();
+
+    renderImageList(); // Update active class
+    updateQAUI(); // Update footer
 
     els.img.src = `/api/images/${filename}`;
 
-    // Reset transform (will be calculated in fitImageToScreen)
     state.transform = { scale: 1, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 };
-    // Don't update transform yet, wait for load
 
     els.img.onload = () => {
         resizeCanvas();
-        fitImageToScreen(); // Calculate fit
+        fitImageToScreen();
         fetchAnnotations(filename);
     };
 }
@@ -250,14 +351,11 @@ function fitImageToScreen() {
 
     if (imgW === 0 || imgH === 0) return;
 
-    // Add some padding (e.g., 40px visible space)
     const availW = viewW - 40;
     const availH = viewH - 40;
 
     const scaleX = availW / imgW;
     const scaleY = availH / imgH;
-
-    // Fit entire image
     const fitScale = Math.min(scaleX, scaleY);
 
     state.transform.scale = fitScale;
@@ -281,7 +379,6 @@ function renderModelToggles() {
     keys.forEach((key, idx) => {
         const info = state.modelsConfig[key];
         const color = CONFIG.colors[idx % CONFIG.colors.length];
-        // Store assigned color in state for drawing
         state.modelsConfig[key].renderColor = color;
 
         const label = document.createElement('label');
@@ -302,31 +399,8 @@ function renderModelToggles() {
     });
 }
 
-async function saveSettings() {
-    try {
-        await fetch('/api/project/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ settings: { classColors: state.classColors } })
-        });
-    } catch (err) {
-        console.error("Failed to save settings:", err);
-    }
-}
-
-function getRandomColor() {
-    const letters = '0123456789ABCDEF';
-    let color = '#';
-    for (let i = 0; i < 6; i++) {
-        color += letters[Math.floor(Math.random() * 16)];
-    }
-    return color;
-}
-
 function renderClassFilters() {
     els.classFilters.innerHTML = '';
-
-    // Union of configured labels and actually detected classes
     const allLabels = new Set([
         ...Object.values(state.labelsConfig),
         ...Object.keys(state.classCounts)
@@ -335,31 +409,25 @@ function renderClassFilters() {
 
     sortedLabels.forEach(cls => {
         const count = state.classCounts[cls] || 0;
-
-        // Ensure color exists
         if (!state.classColors[cls]) {
             state.classColors[cls] = getRandomColor();
         }
         const color = state.classColors[cls];
-
-        // Main container: Flex row, full width
         const container = document.createElement('div');
         container.style.display = 'flex';
         container.style.alignItems = 'center';
         container.style.marginBottom = '4px';
         container.style.justifyContent = 'space-between';
 
-        // Left side: Checkbox + Class Name
         const leftGroup = document.createElement('div');
         leftGroup.style.display = 'flex';
         leftGroup.style.alignItems = 'center';
-        leftGroup.style.gap = '8px'; // Space between checkbox and text
+        leftGroup.style.gap = '8px';
 
         const input = document.createElement('input');
         input.type = 'checkbox';
         input.checked = state.filters.classes.has(cls);
         input.style.cursor = 'pointer';
-        // Set checkbox color to match class color
         input.style.accentColor = color;
 
         input.onchange = (e) => {
@@ -376,7 +444,6 @@ function renderClassFilters() {
         leftGroup.appendChild(input);
         leftGroup.appendChild(span);
 
-        // Right side: Color Picker
         const colorPicker = document.createElement('input');
         colorPicker.type = 'color';
         colorPicker.value = color;
@@ -385,12 +452,12 @@ function renderClassFilters() {
         colorPicker.style.height = '24px';
         colorPicker.style.padding = '0';
         colorPicker.style.cursor = 'pointer';
-        colorPicker.style.background = 'none'; // Clean look
+        colorPicker.style.background = 'none';
 
-        colorPicker.onchange = (e) => {
+        colorPicker.onchange = (e) => { // Auto-save color settings
             const newColor = e.target.value;
             state.classColors[cls] = newColor;
-            input.style.accentColor = newColor; // Update checkbox color immediately
+            input.style.accentColor = newColor;
             draw();
             saveSettings();
         };
@@ -401,12 +468,30 @@ function renderClassFilters() {
     });
 }
 
+function getRandomColor() {
+    const letters = '0123456789ABCDEF';
+    let color = '#';
+    for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+    }
+    return color;
+}
+
+async function saveSettings() {
+    try {
+        await fetch('/api/project/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settings: { classColors: state.classColors } })
+        });
+    } catch (err) {
+        console.error("Failed to save settings:", err);
+    }
+}
+
 function draw() {
     ctx.clearRect(0, 0, els.canvas.width, els.canvas.height);
-
-    // SORT KEYS for Consistent Z-Order
     const sortedKeys = Object.keys(state.modelsConfig).sort();
-
     sortedKeys.forEach(key => {
         if (state.visibleModels[key]) {
             drawBoxes(state.annotations[key], state.modelsConfig[key].renderColor);
@@ -426,16 +511,12 @@ function drawBoxes(boxes, modelColor) {
 
         const isHidden = state.hiddenBoxes.has(box);
         const isHovered = (box === state.hoverBox);
-
-        // Color priority: Class Color > Model Color
         let color = state.classColors[box.class] || modelColor;
 
         ctx.save();
-
         if (isHidden) {
-            // Apply GHOST Opacity
             ctx.globalAlpha = state.ghostOpacity;
-            ctx.strokeStyle = '#888'; // Grayish
+            ctx.strokeStyle = '#888';
             ctx.fillStyle = 'transparent';
         } else {
             ctx.globalAlpha = 1.0;
@@ -444,59 +525,49 @@ function drawBoxes(boxes, modelColor) {
         }
 
         if (isHovered) {
-            ctx.lineWidth = state.lineWidth + 2; // Highlight
+            ctx.lineWidth = state.lineWidth + 2;
             if (isHidden) {
-                ctx.strokeStyle = '#fff'; // Bright for ghost hover
-                ctx.globalAlpha = state.ghostOpacity + 0.3; // Slightly more visible on hover
+                ctx.strokeStyle = '#fff';
+                ctx.globalAlpha = state.ghostOpacity + 0.3;
             }
         } else {
             ctx.lineWidth = state.lineWidth;
         }
 
         const [x, y, w, h] = box.bbox;
-
         ctx.strokeRect(x, y, w, h);
 
-        // Only draw Labels/Scores if NOT Hidden
         if (!isHidden && (state.showLabels || state.showScores)) {
             let labelText = "";
             if (state.showLabels) labelText += box.class;
             if (state.showScores) labelText += (labelText ? " " : "") + box.conf.toFixed(2);
 
-            ctx.fillStyle = color; // Label background matches class color
+            ctx.fillStyle = color;
             const textMetrics = ctx.measureText(labelText);
             const textHeight = state.fontSize * 1.2;
             const pad = 5;
             const textWidth = textMetrics.width + (pad * 2);
 
-            // Smart Positioning
             let lblY = y - textHeight;
             let textY = y - (textHeight * 0.2);
-
             if (y < textHeight) {
                 lblY = y;
                 textY = y + textHeight - (textHeight * 0.2);
             }
-
             ctx.fillRect(x, lblY, textWidth, textHeight);
-
-            ctx.fillStyle = '#000'; // Black text
+            ctx.fillStyle = '#000';
             ctx.fillText(labelText, x + pad, textY);
         }
-
         ctx.restore();
     });
 }
 
 function updateTransform() {
-    // Apply CSS transform to the WRAPPER (container)
     els.container.style.transform = `translate(${state.transform.x}px, ${state.transform.y}px) scale(${state.transform.scale})`;
 }
 
 function getBoxAt(x, y, onlyVisible = false) {
     let hitBox = null;
-
-    // SORT KEYS for Consistent Z-Order (Must match draw() order!)
     const sortedKeys = Object.keys(state.modelsConfig).sort();
 
     sortedKeys.forEach(key => {
@@ -507,13 +578,11 @@ function getBoxAt(x, y, onlyVisible = false) {
         boxes.forEach(box => {
             if (!state.filters.classes.has(box.class)) return;
             if (box.conf < state.confidence) return;
-
-            // "Ghost Mode": Hidden boxes are interactive for unhiding (dblclick)
             if (onlyVisible && state.hiddenBoxes.has(box)) return;
 
             const [bx, by, bw, bh] = box.bbox;
             if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) {
-                hitBox = box; // Updates to latest (topmost) match
+                hitBox = box;
             }
         });
     });
@@ -527,7 +596,6 @@ function handleCanvasClick(e) {
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    // Single Click: Hide Visible Box
     const box = getBoxAt(x, y, true);
     if (box) {
         state.hiddenBoxes.add(box);
@@ -542,11 +610,7 @@ function handleCanvasDblClick(e) {
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    // Double Click: Unhide Box
-    // Use getBoxAt which returns exact TOPMOST item (Visible or Ghost).
-    // This matches what the user sees highlighted.
     const box = getBoxAt(x, y, false);
-
     if (box && state.hiddenBoxes.has(box)) {
         state.hiddenBoxes.delete(box);
         draw();
@@ -565,13 +629,30 @@ function setupEventListeners() {
         };
     }
 
+    // QA Listeners
+    if (els.qaComment) {
+        els.qaComment.onchange = (e) => {
+            const currentStatus = state.qaData[state.currentImage]?.status || 'unreviewed';
+            updateQAState(currentStatus, e.target.value);
+        };
+    }
+
+    if (els.filterQA) {
+        els.filterQA.onchange = (e) => {
+            state.filterQA = e.target.value;
+            renderImageList();
+        };
+    }
+
+    // We attach global window functions for HTML onclick if needed, but better here
+    window.setQAStatus = setQAStatus;
+
     els.confSlider.oninput = (e) => {
         state.confidence = parseFloat(e.target.value);
         els.confValue.textContent = state.confidence;
         draw();
     };
 
-    // Visual Settings
     if (els.sliderThickness) {
         els.sliderThickness.oninput = (e) => {
             state.lineWidth = parseInt(e.target.value);
@@ -607,7 +688,6 @@ function setupEventListeners() {
         };
     }
 
-    // Zoom Buttons
     const btnZoomIn = document.getElementById('btn-zoom-in');
     const btnZoomOut = document.getElementById('btn-zoom-out');
     const btnResetView = document.getElementById('btn-reset-view');
@@ -633,7 +713,6 @@ function setupEventListeners() {
         };
     }
 
-    // Zoom / Pan / Click
     const container = els.container;
     let rawStartX = 0;
     let rawStartY = 0;
@@ -656,10 +735,8 @@ function setupEventListeners() {
         state.transform.isDragging = true;
         state.transform.startX = e.clientX - state.transform.x;
         state.transform.startY = e.clientY - state.transform.y;
-
         rawStartX = e.clientX;
         rawStartY = e.clientY;
-
         container.style.cursor = 'grabbing';
     };
 
@@ -696,7 +773,6 @@ function setupEventListeners() {
                 handleCanvasClick(e);
             }
         }
-
         state.transform.isDragging = false;
         container.style.cursor = 'grab';
     };

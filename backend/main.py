@@ -274,3 +274,82 @@ async def get_annotations(filename: str):
                 print(f"Error reading {json_path}: {e}")
                 
     return response
+
+# -- QA Workflow --
+import pandas as pd
+from datetime import datetime
+
+class QARequest(BaseModel):
+    image: str
+    status: str
+    comment: str = ""
+
+def get_qa_file_path():
+    if not state.root_dir:
+        return None
+    return os.path.join(state.root_dir, "qa_status.xlsx")
+
+@app.post("/api/qa/save")
+async def save_qa_status(req: QARequest):
+    qa_path = get_qa_file_path()
+    if not qa_path:
+        raise HTTPException(status_code=400, detail="No project loaded")
+
+    try:
+        # Load existing or create new
+        if os.path.exists(qa_path):
+            df = pd.read_excel(qa_path)
+            # Ensure columns exist
+            if 'image' not in df.columns:
+                df = pd.DataFrame(columns=['image', 'status', 'comment', 'timestamp'])
+        else:
+            df = pd.DataFrame(columns=['image', 'status', 'comment', 'timestamp'])
+
+        # Check if row exists
+        mask = df['image'] == req.image
+        
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        if mask.any():
+            # Update existing
+            df.loc[mask, 'status'] = req.status
+            df.loc[mask, 'comment'] = req.comment
+            df.loc[mask, 'timestamp'] = timestamp
+        else:
+            # Append new
+            new_row = pd.DataFrame([{
+                'image': req.image,
+                'status': req.status,
+                'comment': req.comment,
+                'timestamp': timestamp
+            }])
+            df = pd.concat([df, new_row], ignore_index=True)
+            
+        # Save back
+        df.to_excel(qa_path, index=False)
+        return {"status": "success", "message": "QA status saved"}
+        
+    except Exception as e:
+        print(f"QA Save Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save QA status: {str(e)}")
+
+@app.get("/api/qa/load")
+async def load_qa_status():
+    qa_path = get_qa_file_path()
+    if not qa_path or not os.path.exists(qa_path):
+        return {}
+        
+    try:
+        df = pd.read_excel(qa_path)
+        # Convert to dict: { image: { status, comment } }
+        result = {}
+        for _, row in df.iterrows():
+            result[row['image']] = {
+                "status": row['status'],
+                "comment": row['comment'] if pd.notna(row['comment']) else ""
+            }
+        return result
+    except Exception as e:
+        print(f"QA Load Error: {e}")
+        return {}
+

@@ -69,8 +69,16 @@
     <div class="main-layout">
         <!-- Left Sidebar: Image List -->
         <aside class="sidebar">
-            <div class="sidebar-header" style="justify-content: center;">
-                <h2>Images</h2>
+            <div class="sidebar-header"
+                style="flex-direction: column; align-items: stretch; gap: 0.5rem; justify-content: start;">
+                <h2 style="text-align: center;">Images</h2>
+                <select id="filter-qa" class="filter-select">
+                    <option value="all">Filter: All</option>
+                    <option value="unreviewed">Unreviewed</option>
+                    <option value="correct">Correct</option>
+                    <option value="incorrect">Incorrect</option>
+                    <option value="doubtful">Doubtful</option>
+                </select>
             </div>
             <ul id="image-list">
                 <!-- Populated by JS -->
@@ -112,7 +120,22 @@
             </div>
         </aside>
     </div>
-    <script src="/static/app.js?v=15"></script>
+    <!-- QA Footer -->
+    <footer class="qa-footer">
+        <div class="qa-controls">
+            <button class="qa-btn correct" onclick="setQAStatus('correct')">Correct</button>
+            <button class="qa-btn incorrect" onclick="setQAStatus('incorrect')">Incorrect</button>
+            <button class="qa-btn doubtful" onclick="setQAStatus('doubtful')">Doubtful</button>
+        </div>
+
+        <input type="text" id="qa-comment" class="qa-comment" placeholder="Add a comment...">
+
+        <div style="font-size: 0.8rem; color: #666;">
+            Saved: <span id="qa-saved-status">Synced</span>
+        </div>
+    </footer>
+
+    <script src="/static/app.js?v=16"></script>
 </body>
 
 </html>
