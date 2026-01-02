@@ -782,10 +782,7 @@ function setupEventListeners() {
     }
     if (btnResetView) {
         btnResetView.onclick = () => {
-            state.transform.scale = 1;
-            state.transform.x = 0;
-            state.transform.y = 0;
-            updateTransform();
+            fitImageToScreen();
         };
     }
 
