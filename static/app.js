@@ -529,8 +529,15 @@ function draw() {
 function drawBoxes(boxes, modelColor) {
     if (!boxes) return;
 
-    ctx.lineWidth = state.lineWidth;
-    ctx.font = `bold ${state.fontSize}px Arial`;
+    // Scale relative to viewport: as we zoom in (scale > 1), we want drawing to be smaller in image space
+    // so it appears constant size on screen.
+    const scaleFactor = 1 / state.transform.scale;
+
+    const baseLineWidth = state.lineWidth * scaleFactor;
+    const baseFontSize = state.fontSize * scaleFactor;
+
+    ctx.lineWidth = baseLineWidth;
+    ctx.font = `bold ${baseFontSize}px Arial`;
 
     boxes.forEach(box => {
         if (!state.filters.classes.has(box.class)) return;
@@ -552,13 +559,13 @@ function drawBoxes(boxes, modelColor) {
         }
 
         if (isHovered) {
-            ctx.lineWidth = state.lineWidth + 2;
+            ctx.lineWidth = baseLineWidth + (2 * scaleFactor);
             if (isHidden) {
                 ctx.strokeStyle = '#fff';
                 ctx.globalAlpha = state.ghostOpacity + 0.3;
             }
         } else {
-            ctx.lineWidth = state.lineWidth;
+            ctx.lineWidth = baseLineWidth;
         }
 
         const [x, y, w, h] = box.bbox;
@@ -570,9 +577,12 @@ function drawBoxes(boxes, modelColor) {
             if (state.showScores) labelText += (labelText ? " " : "") + box.conf.toFixed(2);
 
             ctx.fillStyle = color;
+            // Font was set above, but let's reset to ensure correct per-loop if changed (not changed here though)
+            // ctx.font = `bold ${baseFontSize}px Arial`; 
+
             const textMetrics = ctx.measureText(labelText);
-            const textHeight = state.fontSize * 1.2;
-            const pad = 5;
+            const textHeight = baseFontSize * 1.2;
+            const pad = 5 * scaleFactor;
             const textWidth = textMetrics.width + (pad * 2);
 
             let lblY = y - textHeight;
