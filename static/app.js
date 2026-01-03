@@ -44,7 +44,11 @@ const state = {
 
     // Sidebar States
     leftSidebarOpen: true,
-    rightSidebarOpen: true
+    rightSidebarOpen: true,
+
+    // Flagging
+    flagMode: false,
+    flaggedBoxes: new Set() // Set of string IDs
 };
 
 // DOM Elements
@@ -71,6 +75,7 @@ const els = {
     qaDoubtful: document.querySelector('.qa-btn.doubtful'),
     qaComment: document.getElementById('qa-comment'),
     qaSavedStatus: document.getElementById('qa-saved-status'),
+    btnFlagMode: document.getElementById('btn-flag-mode'),
     filterQA: document.getElementById('filter-qa'),
     btnPrev: document.getElementById('btn-prev'),
     btnNext: document.getElementById('btn-next'),
@@ -230,7 +235,11 @@ async function updateQAState(status, comment) {
     if (!state.currentImage) return;
 
     // Optimistic Update
-    state.qaData[state.currentImage] = { status, comment };
+    state.qaData[state.currentImage] = {
+        status,
+        comment,
+        flags: JSON.stringify(Array.from(state.flaggedBoxes))
+    };
     updateQAUI();
     renderImageList(); // Update sidebar icon/color
 
@@ -243,7 +252,8 @@ async function updateQAState(status, comment) {
             body: JSON.stringify({
                 image: state.currentImage,
                 status: status,
-                comment: comment
+                comment: comment,
+                flags: JSON.stringify(Array.from(state.flaggedBoxes))
             })
         });
 
@@ -265,6 +275,7 @@ function updateQAUI() {
         els.qaIncorrect.classList.remove('active');
         els.qaDoubtful.classList.remove('active');
         els.qaComment.value = "";
+        state.flaggedBoxes.clear();
         return;
     }
 
@@ -275,6 +286,18 @@ function updateQAUI() {
     els.qaDoubtful.classList.toggle('active', data.status === 'doubtful');
 
     els.qaComment.value = data.comment || "";
+
+    // Load Flags
+    state.flaggedBoxes.clear();
+    try {
+        if (data.flags) {
+            const flags = JSON.parse(data.flags);
+            flags.forEach(f => state.flaggedBoxes.add(f));
+        }
+    } catch (e) {
+        console.error("Failed to parse flags:", e);
+    }
+    draw();
 }
 
 
@@ -630,6 +653,16 @@ function drawSingleBox(modelKey, box, modelColor, scaleFactor, isHovered) {
 
     ctx.font = `bold ${baseFontSize}px Arial`;
 
+    // Flag Check
+    const boxId = getBoxId(modelKey, box);
+    const isFlagged = state.flaggedBoxes.has(boxId);
+
+    if (isFlagged) {
+        ctx.setLineDash([2 * scaleFactor, 2 * scaleFactor]);
+    } else {
+        ctx.setLineDash([]);
+    }
+
     if (isHidden) {
         ctx.globalAlpha = state.ghostOpacity;
         ctx.strokeStyle = '#888';
@@ -765,15 +798,66 @@ function handleCanvasClick(e) {
 
     // Let's search ALL boxes (onlyVisible=false).
     const box = getBoxAt(x, y, false);
+    console.log("Click at", x, y, "Found box:", box);
 
     if (box) {
-        if (state.hiddenBoxes.has(box)) {
-            state.hiddenBoxes.delete(box);
+        if (state.flagMode) {
+            console.log("Flag Mode Active. Searching for modelKey...");
+            // Flagging Mode
+            // We need modelKey to generate ID. getBoxAt returns just the box object.
+            // We need to modify getBoxAt to return {box, modelKey} or search again.
+            // Let's modify getBoxAt to return modelKey too.
+            // START PATCH: Updating getBoxAt to return more info? 
+            // Or just find the modelKey here.
+
+            // Re-find modelKey for this box
+            let foundKey = null;
+            Object.entries(state.annotations).forEach(([k, boxes]) => {
+                if (boxes.includes(box)) foundKey = k;
+            });
+
+            console.log("Found Key:", foundKey);
+
+            if (foundKey) {
+                const id = getBoxId(foundKey, box);
+                console.log("Generated ID:", id);
+                if (state.flaggedBoxes.has(id)) {
+                    console.log("Unflagging...");
+                    state.flaggedBoxes.delete(id);
+                } else {
+                    console.log("Flagging...");
+                    state.flaggedBoxes.add(id);
+                }
+                // Auto-save when flagging?
+                // existing updateQAState saves status + comment. 
+                // We need to trigger save with current status.
+                const currentQA = state.qaData[state.currentImage] || {};
+                console.log("Saving QA status...", currentQA);
+                updateQAState(currentQA.status, currentQA.comment); // This actually triggers save
+                draw();
+            } else {
+                console.error("Could not find model key for box:", box);
+            }
+
         } else {
-            state.hiddenBoxes.add(box);
+            // Normal Hide Mode
+            if (state.hiddenBoxes.has(box)) {
+                state.hiddenBoxes.delete(box);
+            } else {
+                state.hiddenBoxes.add(box);
+            }
+            draw();
         }
-        draw();
+    } else {
+        console.log("No box found at click");
     }
+}
+
+function toggleFlagMode() {
+    state.flagMode = !state.flagMode;
+    els.btnFlagMode.classList.toggle('active', state.flagMode);
+    // Optional: Change cursor?
+    els.canvas.style.cursor = state.flagMode ? 'crosshair' : 'default';
 }
 
 function handleCanvasDblClick(e) {
@@ -799,6 +883,15 @@ function handleCanvasDblClick(e) {
         state.hiddenBoxes.delete(box);
         draw();
     }
+}
+
+function getBoxId(modelKey, box) {
+    // Generate a unique ID for the box. 
+    // Using modelKey + bbox coords + class.
+    // bbox is [x,y,w,h]
+    const [x, y, w, h] = box.bbox;
+    // Precision might be an issue, fixed to 2 decimals
+    return `${modelKey}|${x.toFixed(2)},${y.toFixed(2)},${w.toFixed(2)},${h.toFixed(2)}|${box.class}`;
 }
 
 // -- Event Listeners --
@@ -948,6 +1041,7 @@ function setupEventListeners() {
     };
 
     els.canvas.onmousedown = (e) => {
+        console.log("MouseDown", e.clientX, e.clientY);
         e.preventDefault();
         state.transform.isDragging = true;
 
@@ -988,9 +1082,12 @@ function setupEventListeners() {
     };
 
     window.onmouseup = (e) => {
+        console.log("MouseUp", e.clientX, e.clientY, "Dragging:", state.transform.isDragging);
         if (state.transform.isDragging) {
             const dist = Math.abs(e.clientX - rawStartX) + Math.abs(e.clientY - rawStartY);
+            console.log("Drag Dist:", dist);
             if (dist < 5) {
+                console.log("Triggering handleCanvasClick form MouseUp");
                 handleCanvasClick(e);
             }
         }

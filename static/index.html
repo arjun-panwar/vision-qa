@@ -130,6 +130,8 @@
                 <button class="qa-btn correct" onclick="setQAStatus('correct')">Correct</button>
                 <button class="qa-btn incorrect" onclick="setQAStatus('incorrect')">Incorrect</button>
                 <button class="qa-btn doubtful" onclick="setQAStatus('doubtful')">Doubtful</button>
+                <div style="border-left: 1px solid #ccc; height: 24px; margin: 0 4px;"></div>
+                <button id="btn-flag-mode" class="qa-btn" onclick="toggleFlagMode()">Flag Box</button>
             </div>
             <input type="text" id="qa-comment" class="qa-comment" placeholder="Add a comment...">
         </div>
@@ -146,7 +148,7 @@
         </div>
     </footer>
 
-    <script src="/static/app.js?v=16"></script>
+    <script src="/static/app.js?v=19"></script>
 </body>
 
 </html>

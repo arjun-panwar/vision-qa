@@ -283,6 +283,7 @@ class QARequest(BaseModel):
     image: str
     status: str
     comment: str = ""
+    flags: str = ""  # New field for storing flagged boxes (JSON string)
 
 def get_qa_file_path():
     if not state.root_dir:
@@ -301,9 +302,11 @@ async def save_qa_status(req: QARequest):
             df = pd.read_excel(qa_path)
             # Ensure columns exist
             if 'image' not in df.columns:
-                df = pd.DataFrame(columns=['image', 'status', 'comment', 'timestamp'])
+                df = pd.DataFrame(columns=['image', 'status', 'comment', 'flags', 'timestamp'])
+            if 'flags' not in df.columns:
+                df['flags'] = ""
         else:
-            df = pd.DataFrame(columns=['image', 'status', 'comment', 'timestamp'])
+            df = pd.DataFrame(columns=['image', 'status', 'comment', 'flags', 'timestamp'])
 
         # Check if row exists
         mask = df['image'] == req.image
@@ -314,6 +317,7 @@ async def save_qa_status(req: QARequest):
             # Update existing
             df.loc[mask, 'status'] = req.status
             df.loc[mask, 'comment'] = req.comment
+            df.loc[mask, 'flags'] = req.flags
             df.loc[mask, 'timestamp'] = timestamp
         else:
             # Append new
@@ -321,6 +325,7 @@ async def save_qa_status(req: QARequest):
                 'image': req.image,
                 'status': req.status,
                 'comment': req.comment,
+                'flags': req.flags,
                 'timestamp': timestamp
             }])
             df = pd.concat([df, new_row], ignore_index=True)
@@ -341,12 +346,19 @@ async def load_qa_status():
         
     try:
         df = pd.read_excel(qa_path)
-        # Convert to dict: { image: { status, comment } }
+        # Ensure status is string and handle NaN
+        if 'status' in df.columns:
+            df['status'] = df['status'].fillna('').astype(str)
+        if 'flags' in df.columns:
+            df['flags'] = df['flags'].fillna('').astype(str)
+            
+        # Convert to dict: { image: { status, comment, flags } }
         result = {}
         for _, row in df.iterrows():
             result[row['image']] = {
                 "status": row['status'],
-                "comment": row['comment'] if pd.notna(row['comment']) else ""
+                "comment": row['comment'] if pd.notna(row['comment']) else "",
+                "flags": row['flags'] if 'flags' in df.columns and pd.notna(row['flags']) else ""
             }
         return result
     except Exception as e:
