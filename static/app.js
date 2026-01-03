@@ -91,10 +91,33 @@ const ctx = els.canvas.getContext('2d');
 // -- Initialization --
 
 async function init() {
+    // Move canvas to mainView to decouple from container transform (css zoom)
+    if (els.canvas.parentElement !== els.mainView) {
+        els.mainView.appendChild(els.canvas);
+        els.canvas.style.position = 'absolute';
+        els.canvas.style.top = '0';
+        els.canvas.style.left = '0';
+        els.canvas.style.width = '100%';
+        els.canvas.style.height = '100%';
+        els.canvas.style.pointerEvents = 'auto';
+        els.canvas.style.zIndex = '100';
+    }
+
+    // Force styles to avoid CSS caching issues
+    els.mainView.style.padding = '0';
+    els.container.style.transformOrigin = '0 0';
+    // Also ensure canvas-wrapper is absolute as per latest design
+    els.container.style.position = 'absolute';
+    els.container.style.top = '0';
+    els.container.style.left = '0';
+
     await fetchConfig();
     await fetchImageList(); // Also fetches QA data implicitly if tied, but we'll fetch QA separately first
     await fetchQAStatus();
     setupEventListeners();
+
+    // Initial resize to match viewport
+    resizeCanvas();
 }
 
 async function fetchConfig() {
@@ -395,17 +418,20 @@ function fitImageToScreen() {
     const fitScale = Math.min(scaleX, scaleY);
 
     state.transform.scale = fitScale;
-    state.transform.x = 0;
-    state.transform.y = 0;
+
+    // Center the image manually since we use absolute positioning
+    state.transform.x = (viewW - imgW * fitScale) / 2;
+    state.transform.y = (viewH - imgH * fitScale) / 2;
 
     updateTransform();
 }
 
 function resizeCanvas() {
-    els.canvas.width = els.img.naturalWidth;
-    els.canvas.height = els.img.naturalHeight;
-    els.canvas.style.width = els.img.clientWidth + 'px';
-    els.canvas.style.height = els.img.clientHeight + 'px';
+    // Canvas should match the viewport (mainView) size, NOT the image size
+    const rect = els.mainView.getBoundingClientRect();
+    els.canvas.width = rect.width;
+    els.canvas.height = rect.height;
+    draw();
 }
 
 function toggleSidebar(side) {
@@ -421,6 +447,7 @@ function toggleSidebar(side) {
     // Transition matches CSS (0.3s)
     setTimeout(() => {
         fitImageToScreen();
+        resizeCanvas();
     }, 350);
 }
 
@@ -542,11 +569,22 @@ async function saveSettings() {
 }
 
 function draw() {
+    // Clear the viewport
     ctx.clearRect(0, 0, els.canvas.width, els.canvas.height);
+
+    // Apply transform to context
+    ctx.save();
+    ctx.translate(state.transform.x, state.transform.y);
+    ctx.scale(state.transform.scale, state.transform.scale);
+
     const sortedKeys = Object.keys(state.modelsConfig).sort();
 
-    // scale: 1 means no zoom.
-    // We need to scale the line width and font size so they stay constant on the screen (inverse of zoom)
+    // Scale Logic:
+    // ScaleFactor is used to keep lines/fonts constant SIZE on screen.
+    // If we zoom in (scale=2), we want line width to represent 2 SCREEN pixels.
+    // Since we are now applying ctx.scale(2), if we draw coordinate width 1, it becomes 2 screen pixels.
+    // So '1' logical unit = 'scale' screen pixels.
+    // To get N screen pixels, we need N/scale logical units.
     const scaleFactor = 1 / state.transform.scale;
 
     sortedKeys.forEach(key => {
@@ -572,6 +610,9 @@ function draw() {
     if (state.hoverBox) {
         drawSingleBox(null, state.hoverBox, state.hoverModelColor || 'white', scaleFactor, true);
     }
+
+    // Restore context (remove translation/scale)
+    ctx.restore();
 }
 
 function drawSingleBox(modelKey, box, modelColor, scaleFactor, isHovered) {
@@ -642,19 +683,23 @@ function drawSingleBox(modelKey, box, modelColor, scaleFactor, isHovered) {
 }
 
 function updateTransform() {
+    // Only apply transform to the container (image), NOT the canvas
+    // Canvas is static, we transform the context inside 'draw'
     els.container.style.transform = `translate(${state.transform.x}px, ${state.transform.y}px) scale(${state.transform.scale})`;
+    draw(); // Re-draw with new transform
 }
 
 // Check if x,y is inside box OR label
-function getBoxAt(x, y, onlyVisible = false) {
+function getBoxAt(screenX, screenY, onlyVisible = false) {
     let hitBox = null;
-    // We need to iterate in reverse or check Z-order? 
-    // Usually Last Drawn is 'Top'. So if we iterate normal order, the last one we find overwrites. 
-    // That's correct for 'Top' selection.
+
+    // Convert screen coordinates to IMAGE coordinates
+    const imgX = (screenX - state.transform.x) / state.transform.scale;
+    const imgY = (screenY - state.transform.y) / state.transform.scale;
 
     const sortedKeys = Object.keys(state.modelsConfig).sort();
 
-    // Scale factor for label calc
+    // Scale factor for label calc (labels are in image space)
     const scaleFactor = 1 / state.transform.scale;
     const baseFontSize = state.fontSize * scaleFactor;
 
@@ -671,17 +716,13 @@ function getBoxAt(x, y, onlyVisible = false) {
             const [bx, by, bw, bh] = box.bbox;
 
             // 1. Box Hit
-            let isHit = (x >= bx && x <= bx + bw && y >= by && y <= by + bh);
+            let isHit = (imgX >= bx && imgX <= bx + bw && imgY >= by && imgY <= by + bh);
 
             // 2. Label Hit (if showing)
             if (!isHit && !state.hiddenBoxes.has(box) && (state.showLabels || state.showScores)) {
-                // Re-calculate label dims
-                // Ideally this should be shared logic but for now we duplicate calculation 
-                // or we could cache label rect on the box object during draw.
-                // Let's recalculate for safety.
 
-                // Need context to measure text? 
-                // We can approximate or use the global ctx
+                // Re-calc label
+                // Need to match draw logic carefully
                 ctx.font = `bold ${baseFontSize}px Arial`;
                 let labelText = "";
                 if (state.showLabels) labelText += box.class;
@@ -697,8 +738,7 @@ function getBoxAt(x, y, onlyVisible = false) {
                     lblY = by;
                 }
 
-                // Label Rect: x=bx, y=lblY, w=textWidth, h=textHeight
-                if (x >= bx && x <= bx + textWidth && y >= lblY && y <= lblY + textHeight) {
+                if (imgX >= bx && imgX <= bx + textWidth && imgY >= lblY && imgY <= lblY + textHeight) {
                     isHit = true;
                 }
             }
@@ -713,10 +753,8 @@ function getBoxAt(x, y, onlyVisible = false) {
 
 function handleCanvasClick(e) {
     const rect = els.canvas.getBoundingClientRect();
-    const scaleX = els.canvas.width / rect.width;
-    const scaleY = els.canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
     // Toggle hide/show
     // "onlyVisible=true" logic in old code was: find a box, if found, hide it. 
@@ -752,10 +790,8 @@ function handleCanvasDblClick(e) {
     // Re-implementing exactly as before but with label support:
 
     const rect = els.canvas.getBoundingClientRect();
-    const scaleX = els.canvas.width / rect.width;
-    const scaleY = els.canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
     // Double click to UNHIDE
     const box = getBoxAt(x, y, false);
@@ -876,37 +912,63 @@ function setupEventListeners() {
     let rawStartX = 0;
     let rawStartY = 0;
 
-    container.ondblclick = (e) => {
+    // INTERACTION ON CANVAS
+    // Since canvas is now on top of everything, it catches all mouse events.
+    // We attach listeners to the CANVAS now.
+
+
+
+    els.canvas.ondblclick = (e) => {
         e.preventDefault();
         handleCanvasDblClick(e);
     };
 
-    container.onwheel = (e) => {
+    els.canvas.onwheel = (e) => {
         e.preventDefault();
+
+        const rect = els.canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+
         const scaleAmount = -e.deltaY * 0.001;
-        state.transform.scale += scaleAmount * state.transform.scale;
-        state.transform.scale = Math.min(Math.max(0.1, state.transform.scale), 10);
+        let newScale = state.transform.scale + (scaleAmount * state.transform.scale);
+        newScale = Math.min(Math.max(0.1, newScale), 10);
+
+        // Zoom to mouse logic
+        // P_img = (Mouse - OldTx) / OldScale
+        // NewTx = Mouse - P_img * NewScale
+        const pX = (mx - state.transform.x) / state.transform.scale;
+        const pY = (my - state.transform.y) / state.transform.scale;
+
+        state.transform.x = mx - pX * newScale;
+        state.transform.y = my - pY * newScale;
+        state.transform.scale = newScale;
+
         updateTransform();
     };
 
-    container.onmousedown = (e) => {
+    els.canvas.onmousedown = (e) => {
         e.preventDefault();
         state.transform.isDragging = true;
+
+        // startX/Y needs to be the 'translated' screen pos vs mouse?
+        // Logic: transform.x (offset) = Mouse - stored_diff
+        // When drag starts, stored_diff (startX) = Mouse - transform.x
         state.transform.startX = e.clientX - state.transform.x;
         state.transform.startY = e.clientY - state.transform.y;
+
         rawStartX = e.clientX;
         rawStartY = e.clientY;
-        container.style.cursor = 'grabbing';
+        els.canvas.style.cursor = 'grabbing';
     };
 
     window.onmousemove = (e) => {
         if (!state.transform.isDragging) {
             const rect = els.canvas.getBoundingClientRect();
             if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-                const scaleX = els.canvas.width / rect.width;
-                const scaleY = els.canvas.height / rect.height;
-                const x = (e.clientX - rect.left) * scaleX;
-                const y = (e.clientY - rect.top) * scaleY;
+                // Coordinate on screen (canvas)
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
 
                 const box = getBoxAt(x, y, false);
                 if (box !== state.hoverBox) {
@@ -933,15 +995,15 @@ function setupEventListeners() {
             }
         }
         state.transform.isDragging = false;
-        container.style.cursor = 'grab';
+        els.canvas.style.cursor = 'grab';
     };
+    els.canvas.style.cursor = 'grab';
 
     const ro = new ResizeObserver(() => {
-        if (!els.img) return;
-        els.canvas.style.width = els.img.clientWidth + 'px';
-        els.canvas.style.height = els.img.clientHeight + 'px';
+        // Observe main view resize, not just img
+        resizeCanvas();
     });
-    ro.observe(els.img);
+    ro.observe(els.mainView);
 }
 
 // Start

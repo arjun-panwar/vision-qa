@@ -186,14 +186,16 @@ body {
     /* Hide anything that pans out */
     background-color: #000;
     position: relative;
-    padding: 20px;
+    padding: 0;
 }
 
 .canvas-wrapper {
-    position: relative;
+    position: absolute;
+    top: 0;
+    left: 0;
     /* Removed max-width/height logic here, controlled by JS transform */
     cursor: grab;
-    transform-origin: center center;
+    transform-origin: 0 0;
     transition: transform 0.1s ease-out;
     /* Smooth zoom */
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
