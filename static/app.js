@@ -544,93 +544,119 @@ async function saveSettings() {
 function draw() {
     ctx.clearRect(0, 0, els.canvas.width, els.canvas.height);
     const sortedKeys = Object.keys(state.modelsConfig).sort();
-    sortedKeys.forEach(key => {
-        if (state.visibleModels[key]) {
-            drawBoxes(state.annotations[key], state.modelsConfig[key].renderColor);
-        }
-    });
-}
 
-function drawBoxes(boxes, modelColor) {
-    if (!boxes) return;
-
-    // Scale relative to viewport: as we zoom in (scale > 1), we want drawing to be smaller in image space
-    // so it appears constant size on screen.
+    // scale: 1 means no zoom.
+    // We need to scale the line width and font size so they stay constant on the screen (inverse of zoom)
     const scaleFactor = 1 / state.transform.scale;
 
+    sortedKeys.forEach(key => {
+        if (!state.visibleModels[key]) return;
+
+        const boxes = state.annotations[key];
+        const modelColor = state.modelsConfig[key].renderColor;
+
+        if (!boxes) return;
+
+        boxes.forEach(box => {
+            // Skip if this is the hovered box (drawn last)
+            if (box === state.hoverBox) {
+                // Store color for later
+                state.hoverModelColor = modelColor;
+                return;
+            }
+            drawSingleBox(key, box, modelColor, scaleFactor, false);
+        });
+    });
+
+    // Draw hovered box last
+    if (state.hoverBox) {
+        drawSingleBox(null, state.hoverBox, state.hoverModelColor || 'white', scaleFactor, true);
+    }
+}
+
+function drawSingleBox(modelKey, box, modelColor, scaleFactor, isHovered) {
+    if (!state.filters.classes.has(box.class)) return;
+    if (box.conf < state.confidence) return;
+
+    const isHidden = state.hiddenBoxes.has(box);
+    let color = state.classColors[box.class] || modelColor;
+
+    ctx.save();
+
+    // Line Widths
     const baseLineWidth = state.lineWidth * scaleFactor;
     const baseFontSize = state.fontSize * scaleFactor;
 
-    ctx.lineWidth = baseLineWidth;
     ctx.font = `bold ${baseFontSize}px Arial`;
 
-    boxes.forEach(box => {
-        if (!state.filters.classes.has(box.class)) return;
-        if (box.conf < state.confidence) return;
+    if (isHidden) {
+        ctx.globalAlpha = state.ghostOpacity;
+        ctx.strokeStyle = '#888';
+        ctx.fillStyle = 'transparent';
+    } else {
+        ctx.globalAlpha = 1.0;
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+    }
 
-        const isHidden = state.hiddenBoxes.has(box);
-        const isHovered = (box === state.hoverBox);
-        let color = state.classColors[box.class] || modelColor;
-
-        ctx.save();
+    if (isHovered) {
+        ctx.lineWidth = baseLineWidth + (2 * scaleFactor);
         if (isHidden) {
-            ctx.globalAlpha = state.ghostOpacity;
-            ctx.strokeStyle = '#888';
-            ctx.fillStyle = 'transparent';
-        } else {
-            ctx.globalAlpha = 1.0;
-            ctx.strokeStyle = color;
-            ctx.fillStyle = color;
+            ctx.strokeStyle = '#fff';
+            ctx.globalAlpha = state.ghostOpacity + 0.3;
+        }
+    } else {
+        ctx.lineWidth = baseLineWidth;
+    }
+
+    const [x, y, w, h] = box.bbox;
+    ctx.strokeRect(x, y, w, h);
+
+    // Draw Label
+    if (!isHidden && (state.showLabels || state.showScores)) {
+        let labelText = "";
+        if (state.showLabels) labelText += box.class;
+        if (state.showScores) labelText += (labelText ? " " : "") + box.conf.toFixed(2);
+
+        ctx.fillStyle = color;
+
+        const textMetrics = ctx.measureText(labelText);
+        const textHeight = baseFontSize * 1.2;
+        const pad = 5 * scaleFactor;
+        const textWidth = textMetrics.width + (pad * 2);
+
+        let lblY = y - textHeight;
+        let textY = y - (textHeight * 0.2);
+
+        // Flip label if it goes off top
+        if (y < textHeight) {
+            lblY = y;
+            textY = y + textHeight - (textHeight * 0.2);
         }
 
-        if (isHovered) {
-            ctx.lineWidth = baseLineWidth + (2 * scaleFactor);
-            if (isHidden) {
-                ctx.strokeStyle = '#fff';
-                ctx.globalAlpha = state.ghostOpacity + 0.3;
-            }
-        } else {
-            ctx.lineWidth = baseLineWidth;
-        }
-
-        const [x, y, w, h] = box.bbox;
-        ctx.strokeRect(x, y, w, h);
-
-        if (!isHidden && (state.showLabels || state.showScores)) {
-            let labelText = "";
-            if (state.showLabels) labelText += box.class;
-            if (state.showScores) labelText += (labelText ? " " : "") + box.conf.toFixed(2);
-
-            ctx.fillStyle = color;
-            // Font was set above, but let's reset to ensure correct per-loop if changed (not changed here though)
-            // ctx.font = `bold ${baseFontSize}px Arial`; 
-
-            const textMetrics = ctx.measureText(labelText);
-            const textHeight = baseFontSize * 1.2;
-            const pad = 5 * scaleFactor;
-            const textWidth = textMetrics.width + (pad * 2);
-
-            let lblY = y - textHeight;
-            let textY = y - (textHeight * 0.2);
-            if (y < textHeight) {
-                lblY = y;
-                textY = y + textHeight - (textHeight * 0.2);
-            }
-            ctx.fillRect(x, lblY, textWidth, textHeight);
-            ctx.fillStyle = '#000';
-            ctx.fillText(labelText, x + pad, textY);
-        }
-        ctx.restore();
-    });
+        ctx.fillRect(x, lblY, textWidth, textHeight);
+        ctx.fillStyle = '#000';
+        ctx.fillText(labelText, x + pad, textY);
+    }
+    ctx.restore();
 }
 
 function updateTransform() {
     els.container.style.transform = `translate(${state.transform.x}px, ${state.transform.y}px) scale(${state.transform.scale})`;
 }
 
+// Check if x,y is inside box OR label
 function getBoxAt(x, y, onlyVisible = false) {
     let hitBox = null;
+    // We need to iterate in reverse or check Z-order? 
+    // Usually Last Drawn is 'Top'. So if we iterate normal order, the last one we find overwrites. 
+    // That's correct for 'Top' selection.
+
     const sortedKeys = Object.keys(state.modelsConfig).sort();
+
+    // Scale factor for label calc
+    const scaleFactor = 1 / state.transform.scale;
+    const baseFontSize = state.fontSize * scaleFactor;
 
     sortedKeys.forEach(key => {
         if (!state.visibleModels[key]) return;
@@ -643,7 +669,41 @@ function getBoxAt(x, y, onlyVisible = false) {
             if (onlyVisible && state.hiddenBoxes.has(box)) return;
 
             const [bx, by, bw, bh] = box.bbox;
-            if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) {
+
+            // 1. Box Hit
+            let isHit = (x >= bx && x <= bx + bw && y >= by && y <= by + bh);
+
+            // 2. Label Hit (if showing)
+            if (!isHit && !state.hiddenBoxes.has(box) && (state.showLabels || state.showScores)) {
+                // Re-calculate label dims
+                // Ideally this should be shared logic but for now we duplicate calculation 
+                // or we could cache label rect on the box object during draw.
+                // Let's recalculate for safety.
+
+                // Need context to measure text? 
+                // We can approximate or use the global ctx
+                ctx.font = `bold ${baseFontSize}px Arial`;
+                let labelText = "";
+                if (state.showLabels) labelText += box.class;
+                if (state.showScores) labelText += (labelText ? " " : "") + box.conf.toFixed(2);
+
+                const textMetrics = ctx.measureText(labelText);
+                const textHeight = baseFontSize * 1.2;
+                const pad = 5 * scaleFactor;
+                const textWidth = textMetrics.width + (pad * 2);
+
+                let lblY = by - textHeight;
+                if (by < textHeight) {
+                    lblY = by;
+                }
+
+                // Label Rect: x=bx, y=lblY, w=textWidth, h=textHeight
+                if (x >= bx && x <= bx + textWidth && y >= lblY && y <= lblY + textHeight) {
+                    isHit = true;
+                }
+            }
+
+            if (isHit) {
                 hitBox = box;
             }
         });
@@ -658,20 +718,46 @@ function handleCanvasClick(e) {
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    const box = getBoxAt(x, y, true);
+    // Toggle hide/show
+    // "onlyVisible=true" logic in old code was: find a box, if found, hide it. 
+    // But if we want to toggle (unhide), we need to check hidden ones too.
+    // The user said: "I can hide using bbox...". 
+    // If I click a hidden box (ghost), I want to unhide it.
+    // If I click a visible box, I want to hide it.
+
+    // Let's search ALL boxes (onlyVisible=false).
+    const box = getBoxAt(x, y, false);
+
     if (box) {
-        state.hiddenBoxes.add(box);
+        if (state.hiddenBoxes.has(box)) {
+            state.hiddenBoxes.delete(box);
+        } else {
+            state.hiddenBoxes.add(box);
+        }
         draw();
     }
 }
 
 function handleCanvasDblClick(e) {
+    // Maybe deprecated if single click toggles? 
+    // Old logic: Single click -> hide. Dbl click -> unhide.
+    // Ideally we merge into single click toggle for better UX?
+    // User request: "I can hide using bbox, but not with the label".
+    // Does not explicitly ask for toggle, but standard UX is toggle.
+    // I will stick to the existing behavior or improve it. 
+    // The previous code had `handleCanvasClick` doing `add` (hide) and `handleCanvasDblClick` doing `delete` (unhide).
+    // I will preserve that separation if standard, BUT `getBoxAt(..., onlyVisible=true)` in click prevented unhiding via single click.
+    // Let's actually make single click TOGGLE, it's easier.
+    // Wait, let's keep it safe. 
+    // Re-implementing exactly as before but with label support:
+
     const rect = els.canvas.getBoundingClientRect();
     const scaleX = els.canvas.width / rect.width;
     const scaleY = els.canvas.height / rect.height;
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
+    // Double click to UNHIDE
     const box = getBoxAt(x, y, false);
     if (box && state.hiddenBoxes.has(box)) {
         state.hiddenBoxes.delete(box);
