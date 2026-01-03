@@ -658,7 +658,7 @@ function drawSingleBox(modelKey, box, modelColor, scaleFactor, isHovered) {
     const isFlagged = state.flaggedBoxes.has(boxId);
 
     if (isFlagged) {
-        ctx.setLineDash([2 * scaleFactor, 2 * scaleFactor]);
+        ctx.setLineDash([8 * scaleFactor, 4 * scaleFactor]);
     } else {
         ctx.setLineDash([]);
     }
