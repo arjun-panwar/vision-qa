@@ -514,6 +514,49 @@ function renderClassFilters() {
     ]);
     const sortedLabels = Array.from(allLabels).sort();
 
+    // -- Update Header with Toggle & Count --
+    const header = document.getElementById('header-classes');
+    if (header) {
+        header.innerHTML = ''; // Clear to rebuild
+        header.style.display = 'flex';
+        header.style.alignItems = 'center';
+        header.style.gap = '8px';
+
+        const toggleInput = document.createElement('input');
+        toggleInput.type = 'checkbox';
+        toggleInput.id = 'checkbox-toggle-all-header';
+        toggleInput.style.cursor = 'pointer';
+
+        // Determine initial state
+        const allSelected = sortedLabels.every(cls => state.filters.classes.has(cls));
+        const someSelected = sortedLabels.some(cls => state.filters.classes.has(cls));
+
+        toggleInput.checked = allSelected;
+        toggleInput.indeterminate = someSelected && !allSelected;
+
+        toggleInput.onchange = (e) => {
+            if (e.target.checked) {
+                sortedLabels.forEach(cls => state.filters.classes.add(cls));
+            } else {
+                state.filters.classes.clear();
+            }
+            draw();
+            saveSettings();
+            renderClassFilters();
+        };
+
+        // Prevent header click from triggering anything unwanted if we had other listeners
+        // But here we just want the input to work.
+
+        const labelSpan = document.createElement('span');
+        labelSpan.textContent = `Classes (${sortedLabels.length})`;
+
+        header.appendChild(toggleInput);
+        header.appendChild(labelSpan);
+    }
+
+
+    // -- Individual Class Checkboxes --
     sortedLabels.forEach(cls => {
         const count = state.classCounts[cls] || 0;
         if (!state.classColors[cls]) {
@@ -540,8 +583,25 @@ function renderClassFilters() {
         input.onchange = (e) => {
             if (e.target.checked) state.filters.classes.add(cls);
             else state.filters.classes.delete(cls);
+
             draw();
             saveSettings();
+
+            // Re-render essentially to update header state? 
+            // Or just update header input directly?
+            // Re-rendering is safest to keep count/state in sync if logic changes.
+            // But strict re-render might lose focus/scroll? 
+            // renderClassFilters calls innerHTML='' so it rebuilds entire list.
+            // If list is long, might annoy user. 
+            // Let's just update the header checkbox directly here.
+
+            const headerCheckbox = document.getElementById('checkbox-toggle-all-header');
+            if (headerCheckbox) {
+                const allNow = sortedLabels.every(c => state.filters.classes.has(c));
+                const someNow = sortedLabels.some(c => state.filters.classes.has(c));
+                headerCheckbox.checked = allNow;
+                headerCheckbox.indeterminate = someNow && !allNow;
+            }
         };
 
         const span = document.createElement('span');
