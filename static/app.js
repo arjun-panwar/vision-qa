@@ -39,10 +39,10 @@ const state = {
     ghostOpacity: 0.2, // Default
     showLabels: true,
     showScores: true,
-    showScores: true,
     transform: { scale: 1, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 },
 
-    // Sidebar States
+    // Sidebar States (Persisted separately or part of settings?)
+    // Let's persist sidebar states too if we can
     leftSidebarOpen: true,
     rightSidebarOpen: true,
 
@@ -134,8 +134,8 @@ async function fetchConfig() {
         state.labelsConfig = data.labels || {};
 
         // Load Settings
-        if (data.settings && data.settings.classColors) {
-            state.classColors = data.settings.classColors;
+        if (data.settings) {
+            applyVisualSettings(data.settings);
         }
 
         // Initialize visible models (all true by default)
@@ -198,6 +198,7 @@ async function loadProjectFunc(path) {
 
         state.currentImage = null;
         state.qaData = {};
+        await fetchConfig(); // Reload models, labels, and SETTINGS for the new project
         await fetchQAStatus();
         await fetchImageList();
 
@@ -440,11 +441,13 @@ function fitImageToScreen() {
     const scaleY = availH / imgH;
     const fitScale = Math.min(scaleX, scaleY);
 
-    state.transform.scale = fitScale;
-
-    // Center the image manually since we use absolute positioning
-    state.transform.x = (viewW - imgW * fitScale) / 2;
-    state.transform.y = (viewH - imgH * fitScale) / 2;
+    // Only fit to screen if we are in a default/reset state (scale 1).
+    // This allows persisted views (loaded from config) to be respected.
+    if (state.transform.scale === 1 && state.transform.x === 0 && state.transform.y === 0) {
+        state.transform.scale = fitScale;
+        state.transform.x = (viewW - imgW * fitScale) / 2;
+        state.transform.y = (viewH - imgH * fitScale) / 2;
+    }
 
     updateTransform();
 }
@@ -472,6 +475,8 @@ function toggleSidebar(side) {
         fitImageToScreen();
         resizeCanvas();
     }, 350);
+
+    saveSettings();
 }
 
 function renderModelToggles() {
@@ -536,6 +541,7 @@ function renderClassFilters() {
             if (e.target.checked) state.filters.classes.add(cls);
             else state.filters.classes.delete(cls);
             draw();
+            saveSettings();
         };
 
         const span = document.createElement('span');
@@ -579,12 +585,116 @@ function getRandomColor() {
     return color;
 }
 
+// -- Helper Functions for Settings --
+
+function getVisualSettings() {
+    return {
+        // Core Visuals
+        lineWidth: state.lineWidth,
+        fontSize: state.fontSize,
+        ghostOpacity: state.ghostOpacity,
+        showLabels: state.showLabels,
+        showScores: state.showScores,
+
+        // Colors
+        classColors: state.classColors,
+
+        // Filters
+        visibleClasses: Array.from(state.filters.classes),
+
+        // View State
+        transform: state.transform,
+
+        // Sidebar State
+        leftSidebarOpen: state.leftSidebarOpen,
+        rightSidebarOpen: state.rightSidebarOpen,
+
+        // Flagging
+        flagMode: state.flagMode
+    };
+}
+
+function applyVisualSettings(settings) {
+    if (!settings) return;
+
+    if (settings.lineWidth !== undefined) state.lineWidth = settings.lineWidth;
+    if (settings.fontSize !== undefined) state.fontSize = settings.fontSize;
+    if (settings.ghostOpacity !== undefined) state.ghostOpacity = settings.ghostOpacity;
+    if (settings.showLabels !== undefined) state.showLabels = settings.showLabels;
+    if (settings.showScores !== undefined) state.showScores = settings.showScores;
+
+    if (settings.classColors) state.classColors = settings.classColors;
+
+    if (settings.visibleClasses && Array.isArray(settings.visibleClasses)) {
+        state.filters.classes = new Set(settings.visibleClasses);
+    }
+
+    if (settings.transform) {
+        state.transform = settings.transform;
+        // Ensure some defaults if broken
+        if (state.transform.scale === undefined) state.transform.scale = 1;
+        state.transform.isDragging = false;
+    }
+
+    // Sidebars
+    if (settings.leftSidebarOpen !== undefined) {
+        state.leftSidebarOpen = settings.leftSidebarOpen;
+        els.sidebarLeft.classList.toggle('collapsed', !state.leftSidebarOpen);
+    }
+    if (settings.rightSidebarOpen !== undefined) {
+        state.rightSidebarOpen = settings.rightSidebarOpen;
+        els.sidebarRight.classList.toggle('collapsed', !state.rightSidebarOpen);
+    }
+
+    // Flag Mode
+    if (settings.flagMode !== undefined) {
+        state.flagMode = settings.flagMode;
+        if (els.btnFlagMode) els.btnFlagMode.classList.toggle('active', state.flagMode);
+        els.canvas.style.cursor = state.flagMode ? 'crosshair' : (state.transform.isDragging ? 'grabbing' : 'grab');
+    }
+
+    // Update UI controls to match loaded state
+    updateVisualControls();
+}
+
+function updateVisualControls() {
+    if (els.sliderThickness) {
+        els.sliderThickness.value = state.lineWidth;
+        els.valThickness.textContent = state.lineWidth;
+    }
+    if (els.sliderFontSize) {
+        els.sliderFontSize.value = state.fontSize;
+        els.valFontSize.textContent = state.fontSize;
+    }
+    if (els.sliderOpacity) {
+        els.sliderOpacity.value = state.ghostOpacity;
+        if (els.valOpacity) els.valOpacity.textContent = state.ghostOpacity;
+    }
+    if (els.checkLabels) els.checkLabels.checked = state.showLabels;
+    if (els.checkScores) els.checkScores.checked = state.showScores;
+
+    // Re-render class filters if needed (colors might have changed)
+    renderClassFilters();
+}
+
+// Debounce Utility to prevent spamming the API
+function debounce(func, wait) {
+    let timeout;
+    return function (...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), wait);
+    };
+}
+
+const debouncedSaveSettings = debounce(saveSettings, 1000);
+
 async function saveSettings() {
     try {
         await fetch('/api/project/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ settings: { classColors: state.classColors } })
+            body: JSON.stringify({ settings: getVisualSettings() })
         });
     } catch (err) {
         console.error("Failed to save settings:", err);
@@ -857,7 +967,8 @@ function toggleFlagMode() {
     state.flagMode = !state.flagMode;
     els.btnFlagMode.classList.toggle('active', state.flagMode);
     // Optional: Change cursor?
-    els.canvas.style.cursor = state.flagMode ? 'crosshair' : 'default';
+    els.canvas.style.cursor = state.flagMode ? 'crosshair' : 'grab';
+    saveSettings();
 }
 
 function handleCanvasDblClick(e) {
@@ -949,6 +1060,7 @@ function setupEventListeners() {
             state.lineWidth = parseInt(e.target.value);
             els.valThickness.textContent = state.lineWidth;
             draw();
+            debouncedSaveSettings();
         };
     }
     if (els.sliderFontSize) {
@@ -956,6 +1068,7 @@ function setupEventListeners() {
             state.fontSize = parseInt(e.target.value);
             els.valFontSize.textContent = state.fontSize;
             draw();
+            debouncedSaveSettings();
         };
     }
     if (els.sliderOpacity) {
@@ -963,6 +1076,7 @@ function setupEventListeners() {
             state.ghostOpacity = parseFloat(e.target.value);
             if (els.valOpacity) els.valOpacity.textContent = state.ghostOpacity;
             draw();
+            debouncedSaveSettings();
         };
     }
 
@@ -970,12 +1084,14 @@ function setupEventListeners() {
         els.checkLabels.onchange = (e) => {
             state.showLabels = e.target.checked;
             draw();
+            saveSettings(); // Immediate save for toggles
         };
     }
     if (els.checkScores) {
         els.checkScores.onchange = (e) => {
             state.showScores = e.target.checked;
             draw();
+            saveSettings(); // Immediate save for toggles
         };
     }
 
@@ -1093,6 +1209,9 @@ function setupEventListeners() {
         }
         state.transform.isDragging = false;
         els.canvas.style.cursor = 'grab';
+        if (state.flagMode) els.canvas.style.cursor = 'crosshair';
+
+        debouncedSaveSettings(); // Save transform on drag end
     };
     els.canvas.style.cursor = 'grab';
 
