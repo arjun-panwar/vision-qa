@@ -355,6 +355,34 @@ function renderImageList() {
 
     const filter = state.filterQA;
 
+    // -- Calculate Counts --
+    const counts = {
+        all: state.images.length,
+        unreviewed: 0,
+        correct: 0,
+        incorrect: 0,
+        doubtful: 0
+    };
+
+    state.images.forEach(imgName => {
+        const qa = state.qaData[imgName];
+        const status = qa ? qa.status : 'unreviewed';
+        if (!status || status === 'unreviewed') counts.unreviewed++;
+        else if (counts.hasOwnProperty(status)) counts[status]++;
+    });
+
+    // -- Update Filter Dropdown Labels --
+    const options = els.filterQA.options;
+    for (let i = 0; i < options.length; i++) {
+        const opt = options[i];
+        const val = opt.value;
+        if (val === 'all') opt.textContent = `Filter: All (${counts.all})`;
+        else if (val === 'unreviewed') opt.textContent = `Unreviewed (${counts.unreviewed})`;
+        else if (val === 'correct') opt.textContent = `Correct (${counts.correct})`;
+        else if (val === 'incorrect') opt.textContent = `Incorrect (${counts.incorrect})`;
+        else if (val === 'doubtful') opt.textContent = `Doubtful (${counts.doubtful})`;
+    }
+
     state.images.forEach(imgName => {
         const qa = state.qaData[imgName];
         const status = qa ? qa.status : 'unreviewed';
