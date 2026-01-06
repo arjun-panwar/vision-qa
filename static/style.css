@@ -477,6 +477,13 @@ input[type=range] {
 }
 
 /* Button Active States (Blue when active) */
+#btn-compare,
+#btn-unhide-all {
+    background-color: var(--bg-dark);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+}
+
 #btn-compare.active,
 #btn-compare:hover,
 #btn-unhide-all.active,
