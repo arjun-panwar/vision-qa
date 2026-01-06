@@ -100,7 +100,10 @@ const els = {
     btnFlagMode: document.getElementById('btn-flag-mode'),
     filterQA: document.getElementById('filter-qa'),
     btnPrev: document.getElementById('btn-prev'),
+    btnPrev: document.getElementById('btn-prev'),
     btnNext: document.getElementById('btn-next'),
+    imageNameDisplay: document.getElementById('image-name-display'),
+    copyTooltip: document.getElementById('copy-tooltip'),
 
     // Visual Settings
     sliderThickness: document.getElementById('slider-thickness'),
@@ -182,6 +185,23 @@ async function fetchConfig() {
         Object.values(state.labelsConfig).forEach(label => {
             state.filters.classes.add(label);
         });
+
+        if (els.imageNameDisplay) {
+            els.imageNameDisplay.onclick = () => {
+                if (!state.currentImage) return;
+                navigator.clipboard.writeText(state.currentImage).then(() => {
+                    // Feedback via Tooltip
+                    if (els.copyTooltip) {
+                        els.copyTooltip.style.opacity = '1';
+                        setTimeout(() => {
+                            els.copyTooltip.style.opacity = '0';
+                        }, 1000);
+                    }
+                }).catch(err => {
+                    console.error('Failed to copy: ', err);
+                });
+            };
+        }
 
         renderModelToggles();
         renderClassFilters(); // Initial render with 0 counts
@@ -460,6 +480,12 @@ function loadImage(filename) {
     const src = `/api/images/${filename}`;
     if (els.imgLeft) els.imgLeft.src = src;
     if (els.imgRight) els.imgRight.src = src;
+
+    // Update Name Display
+    if (els.imageNameDisplay) {
+        els.imageNameDisplay.textContent = filename;
+        els.imageNameDisplay.title = `Click to copy: ${filename}`;
+    }
 
     state.transform = { scale: 1, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 };
 

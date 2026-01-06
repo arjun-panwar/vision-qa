@@ -441,3 +441,15 @@ input[type=range] {
     background-color: #333;
     color: white;
 }
+
+/* Image Name Display Feedback */
+.copy-feedback {
+    animation: flash-green 0.5s ease;
+    color: var(--success) !important;
+    border-color: var(--success) !important;
+}
+
+@keyframes flash-green {
+    0% { background-color: rgba(0, 255, 0, 0.1); }
+    100% { background-color: transparent; }
+}
