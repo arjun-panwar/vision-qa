@@ -48,7 +48,12 @@ const state = {
 
     // Flagging
     flagMode: false,
-    flaggedBoxes: new Set() // Set of string IDs
+    flaggedBoxes: new Set(), // Set of string IDs
+
+    // Comparison Mode
+    comparisonMode: false,
+    compareModelLeft: null, // modelKey
+    compareModelRight: null // modelKey
 };
 
 // DOM Elements
@@ -58,10 +63,24 @@ const els = {
     btnToggleLeft: document.getElementById('btn-toggle-left'),
     btnToggleRight: document.getElementById('btn-toggle-right'),
     imageList: document.getElementById('image-list'),
-    img: document.getElementById('source-image'),
-    canvas: document.getElementById('overlay-canvas'),
-    container: document.getElementById('canvas-container'),
+
+    // Split View Elements
+    imgLeft: document.getElementById('source-image-left'),
+    canvasLeft: document.getElementById('overlay-canvas-left'),
+    containerLeft: document.getElementById('canvas-container-left'),
+
+    imgRight: document.getElementById('source-image-right'),
+    canvasRight: document.getElementById('overlay-canvas-right'),
+    containerRight: document.getElementById('canvas-container-right'),
+
     mainView: document.querySelector('.main-view'),
+
+    // Comparison Controls
+    btnCompare: document.getElementById('btn-compare'),
+    compareControls: document.getElementById('compare-controls'),
+    selectModelLeft: document.getElementById('select-model-left'),
+    selectModelRight: document.getElementById('select-model-right'),
+
     modelToggles: document.getElementById('model-toggles'),
     confSlider: document.getElementById('conf-slider'),
     confValue: document.getElementById('conf-value'),
@@ -91,30 +110,42 @@ const els = {
     checkScores: document.getElementById('check-scores')
 };
 
-const ctx = els.canvas.getContext('2d');
+// Two contexts
+const ctxLeft = els.canvasLeft.getContext('2d');
+const ctxRight = els.canvasRight.getContext('2d');
 
 // -- Initialization --
 
 async function init() {
-    // Move canvas to mainView to decouple from container transform (css zoom)
-    if (els.canvas.parentElement !== els.mainView) {
-        els.mainView.appendChild(els.canvas);
-        els.canvas.style.position = 'absolute';
-        els.canvas.style.top = '0';
-        els.canvas.style.left = '0';
-        els.canvas.style.width = '100%';
-        els.canvas.style.height = '100%';
-        els.canvas.style.pointerEvents = 'auto';
-        els.canvas.style.zIndex = '100';
-    }
+    // -- Setup Canvas Styles --
+    // We already have them in HTML/CSS, but let's ensure they are positioned correctly within their wrappers
+    // The previous logic moved canvas to mainView. In split view, canvases MUST stay in their wrappers.
+    // So we remove the logic that moved els.canvas to mainView.
 
-    // Force styles to avoid CSS caching issues
-    els.mainView.style.padding = '0';
-    els.container.style.transformOrigin = '0 0';
-    // Also ensure canvas-wrapper is absolute as per latest design
-    els.container.style.position = 'absolute';
-    els.container.style.top = '0';
-    els.container.style.left = '0';
+    // Ensure wrappers are relative (CSS handles this via .canvas-wrapper)
+    // Ensure canvases are absolute top-left
+    [els.canvasLeft, els.canvasRight].forEach(c => {
+        c.style.position = 'absolute';
+        c.style.top = '0';
+        c.style.left = '0';
+        c.style.width = '100%';
+        c.style.height = '100%';
+        c.style.pointerEvents = 'auto'; // Catch events
+        c.style.zIndex = '100'; // Force on top of transformed image
+    });
+
+    // Ensure Images display block
+    if (els.imgLeft) els.imgLeft.style.display = 'block';
+    if (els.imgRight) els.imgRight.style.display = 'block';
+
+    // Force styles to avoid CSS caching issues (resetting wrapper styles)
+    [els.containerLeft, els.containerRight].forEach(c => {
+        c.style.transformOrigin = '0 0';
+        // c.style.position = 'absolute'; // Removed: CSS handles this (relative for split, absolute for single)
+        // Actually, for SINGLE view (default), we want absolute top left.
+        // For SPLIT view, we want them relative/flex.
+        // Let's defer layout to CSS classes, but ensure defaults here.
+    });
 
     await fetchConfig();
     await fetchImageList(); // Also fetches QA data implicitly if tied, but we'll fetch QA separately first
@@ -276,10 +307,12 @@ function updateQAUI() {
         els.qaIncorrect.classList.remove('active');
         els.qaDoubtful.classList.remove('active');
         els.qaComment.value = "";
+        els.qaSavedStatus.textContent = "";
+        if (els.imgLeft) els.imgLeft.src = "";
+        if (els.imgRight) els.imgRight.src = "";
         state.flaggedBoxes.clear();
         return;
     }
-
     const data = state.qaData[state.currentImage] || { status: null, comment: "" };
 
     els.qaCorrect.classList.toggle('active', data.status === 'correct');
@@ -408,6 +441,7 @@ function renderImageList() {
 }
 
 function loadImage(filename) {
+    if (!filename) return;
     state.currentImage = filename;
 
     // Reset hidden boxes on image change? Yes usually
@@ -416,15 +450,24 @@ function loadImage(filename) {
     renderImageList(); // Update active class
     updateQAUI(); // Update footer
 
-    els.img.src = `/api/images/${filename}`;
+    renderImageList(); // Update active class
+    updateQAUI(); // Update footer
+
+    // Set src for BOTH images
+    const src = `/api/images/${filename}`;
+    if (els.imgLeft) els.imgLeft.src = src;
+    if (els.imgRight) els.imgRight.src = src;
 
     state.transform = { scale: 1, x: 0, y: 0, isDragging: false, startX: 0, startY: 0 };
 
-    els.img.onload = () => {
-        resizeCanvas();
-        fitImageToScreen();
-        fetchAnnotations(filename);
-    };
+    // Use imgLeft as the primary for sizing
+    if (els.imgLeft) {
+        els.imgLeft.onload = () => {
+            resizeCanvas();
+            fitImageToScreen();
+            fetchAnnotations(filename);
+        };
+    }
 }
 
 function navigateImage(offset) {
@@ -453,17 +496,36 @@ function navigateImage(offset) {
 }
 
 function fitImageToScreen() {
-    if (!els.img || !els.mainView) return;
+    // Use lef image as reference
+    const img = els.imgLeft;
+    if (!img || !els.mainView) return;
 
-    const viewW = els.mainView.clientWidth;
-    const viewH = els.mainView.clientHeight;
-    const imgW = els.img.naturalWidth;
-    const imgH = els.img.naturalHeight;
+    const viewW = els.mainView.clientWidth; // In split view, this is full width. 
+    // Wait, if split view, available width for one image is 50%.
+    // But wrapper width should handle that? 
+    // container transform applies to wrapper? No, container IS inside wrapper.
+    // Actually, els.mainView is the parent of wrappers.
+    // Wrappers are 100% or 50%.
+    // Determine viewport dimensions
+    let viewWidth, viewHeight;
+    if (els.mainView.classList.contains('split-view')) {
+        // In split view, the container is the viewport (50% width)
+        viewWidth = els.containerLeft.clientWidth;
+        viewHeight = els.containerLeft.clientHeight;
+    } else {
+        // In single view, the container is absolute and wraps the image (so it's huge).
+        // The viewport is the main view.
+        viewWidth = els.mainView.clientWidth;
+        viewHeight = els.mainView.clientHeight;
+    }
+
+    const imgW = img.naturalWidth;
+    const imgH = img.naturalHeight;
 
     if (imgW === 0 || imgH === 0) return;
 
-    const availW = viewW - 40;
-    const availH = viewH - 40;
+    const availW = viewWidth - 40;
+    const availH = viewHeight - 40;
 
     const scaleX = availW / imgW;
     const scaleY = availH / imgH;
@@ -473,18 +535,23 @@ function fitImageToScreen() {
     // This allows persisted views (loaded from config) to be respected.
     if (state.transform.scale === 1 && state.transform.x === 0 && state.transform.y === 0) {
         state.transform.scale = fitScale;
-        state.transform.x = (viewW - imgW * fitScale) / 2;
-        state.transform.y = (viewH - imgH * fitScale) / 2;
+        state.transform.x = (viewWidth - imgW * fitScale) / 2;
+        state.transform.y = (viewHeight - imgH * fitScale) / 2;
     }
 
     updateTransform();
 }
 
 function resizeCanvas() {
-    // Canvas should match the viewport (mainView) size, NOT the image size
-    const rect = els.mainView.getBoundingClientRect();
-    els.canvas.width = rect.width;
-    els.canvas.height = rect.height;
+    // Canvas should match the wrapper size
+    [els.canvasLeft, els.canvasRight].forEach(cvs => {
+        if (!cvs) return;
+        const wrapper = cvs.parentElement;
+        const rect = wrapper.getBoundingClientRect();
+        // Set canvas internal resolution to match display size
+        cvs.width = rect.width;
+        cvs.height = rect.height;
+    });
     draw();
 }
 
@@ -664,6 +731,79 @@ function renderClassFilters() {
     });
 }
 
+function toggleComparisonMode() {
+    state.comparisonMode = !state.comparisonMode;
+
+    // UI Updates
+    els.btnCompare.classList.toggle('active', state.comparisonMode);
+    els.compareControls.style.display = state.comparisonMode ? 'flex' : 'none';
+    els.containerRight.style.display = state.comparisonMode ? 'block' : 'none';
+    // Wait, els definition is els.containerRight defined in Step 47-ish.
+    // Check definition: els.containerRight. In index.html: style="display: none; ..."
+
+    if (state.comparisonMode) {
+        els.mainView.classList.add('split-view');
+        els.containerRight.style.display = 'block'; // Show right view
+
+        // Populate selects if empty
+        if (els.selectModelLeft.options.length === 0) populateModelSelects();
+
+        // Default selections if null
+        const modelKeys = Object.keys(state.modelsConfig).sort();
+        if (!state.compareModelLeft && modelKeys.length > 0) state.compareModelLeft = modelKeys[0];
+        if (!state.compareModelRight && modelKeys.length > 0) state.compareModelRight = modelKeys.length > 1 ? modelKeys[1] : modelKeys[0];
+
+        els.selectModelLeft.value = state.compareModelLeft;
+        els.selectModelRight.value = state.compareModelRight;
+
+    } else {
+        els.mainView.classList.remove('split-view');
+        els.containerRight.style.display = 'none';
+    }
+
+    // Refit after layout change
+    // Force a re-fit by resetting transform state momentarily if needed, 
+    // or we can just bypass the check in fitImageToScreen by passing a flag.
+    // Simpler: Reset state, then fit.
+    state.transform = { x: 0, y: 0, scale: 1, isDragging: false };
+    updateTransform();
+
+    setTimeout(() => {
+        resizeCanvas();
+        fitImageToScreen();
+    }, 50);
+}
+
+function populateModelSelects() {
+    els.selectModelLeft.innerHTML = '';
+    els.selectModelRight.innerHTML = '';
+
+    const keys = Object.keys(state.modelsConfig).sort();
+
+    keys.forEach(key => {
+        const name = state.modelsConfig[key].name || key;
+
+        const opt1 = document.createElement('option');
+        opt1.value = key;
+        opt1.textContent = name;
+        els.selectModelLeft.appendChild(opt1);
+
+        const opt2 = document.createElement('option');
+        opt2.value = key;
+        opt2.textContent = name;
+        els.selectModelRight.appendChild(opt2);
+    });
+
+    els.selectModelLeft.onchange = (e) => {
+        state.compareModelLeft = e.target.value;
+        draw();
+    };
+    els.selectModelRight.onchange = (e) => {
+        state.compareModelRight = e.target.value;
+        draw();
+    };
+}
+
 function getRandomColor() {
     const letters = '0123456789ABCDEF';
     let color = '#';
@@ -738,7 +878,9 @@ function applyVisualSettings(settings) {
     if (settings.flagMode !== undefined) {
         state.flagMode = settings.flagMode;
         if (els.btnFlagMode) els.btnFlagMode.classList.toggle('active', state.flagMode);
-        els.canvas.style.cursor = state.flagMode ? 'crosshair' : (state.transform.isDragging ? 'grabbing' : 'grab');
+        const cursor = state.flagMode ? 'crosshair' : (state.transform.isDragging ? 'grabbing' : 'grab');
+        if (els.canvasLeft) els.canvasLeft.style.cursor = cursor;
+        if (els.canvasRight) els.canvasRight.style.cursor = cursor;
     }
 
     // Update UI controls to match loaded state
@@ -790,99 +932,126 @@ async function saveSettings() {
 }
 
 function draw() {
+    if (state.comparisonMode) {
+        // Draw Left
+        renderCanvasView(ctxLeft, els.canvasLeft, state.compareModelLeft ? [state.compareModelLeft] : []);
+        // Draw Right
+        renderCanvasView(ctxRight, els.canvasRight, state.compareModelRight ? [state.compareModelRight] : []);
+    } else {
+        // Draw Single (Left Canvas is primary)
+        const visibleKeys = Object.keys(state.modelsConfig).filter(k => state.visibleModels[k]);
+        renderCanvasView(ctxLeft, els.canvasLeft, visibleKeys);
+    }
+}
+
+function renderCanvasView(context, canvasEl, modelKeys) {
     // Clear the viewport
-    ctx.clearRect(0, 0, els.canvas.width, els.canvas.height);
+    context.clearRect(0, 0, canvasEl.width, canvasEl.height);
 
     // Apply transform to context
-    ctx.save();
-    ctx.translate(state.transform.x, state.transform.y);
-    ctx.scale(state.transform.scale, state.transform.scale);
+    context.save();
+    context.translate(state.transform.x, state.transform.y);
+    context.scale(state.transform.scale, state.transform.scale);
 
-    const sortedKeys = Object.keys(state.modelsConfig).sort();
-
-    // Scale Logic:
-    // ScaleFactor is used to keep lines/fonts constant SIZE on screen.
-    // If we zoom in (scale=2), we want line width to represent 2 SCREEN pixels.
-    // Since we are now applying ctx.scale(2), if we draw coordinate width 1, it becomes 2 screen pixels.
-    // So '1' logical unit = 'scale' screen pixels.
-    // To get N screen pixels, we need N/scale logical units.
+    // Scale Logic
     const scaleFactor = 1 / state.transform.scale;
 
-    sortedKeys.forEach(key => {
-        if (!state.visibleModels[key]) return;
+    modelKeys.forEach(key => {
+        // If specific key passed, draw it. 
+        // Note: visibleModels check is done by caller for single view. 
+        // For compare view, we force the selected model.
 
         const boxes = state.annotations[key];
-        const modelColor = state.modelsConfig[key].renderColor;
+        const modelColor = state.modelsConfig[key] ? state.modelsConfig[key].renderColor : 'white';
 
         if (!boxes) return;
 
         boxes.forEach(box => {
             // Skip if this is the hovered box (drawn last)
             if (box === state.hoverBox) {
-                // Store color for later
                 state.hoverModelColor = modelColor;
                 return;
             }
-            drawSingleBox(key, box, modelColor, scaleFactor, false);
+            drawSingleBox(context, key, box, modelColor, scaleFactor, false);
         });
     });
 
-    // Draw hovered box last
+    // Draw hovered box last (only if it belongs to one of the active models)
     if (state.hoverBox) {
-        drawSingleBox(null, state.hoverBox, state.hoverModelColor || 'white', scaleFactor, true);
+        // We need to know which model the hover box belongs to.
+        // We can infer or store it.
+        // If generic hover, just draw it?
+        // Issue: hoverBox might be from a model NOT in this view?
+        // We should check if hoverBox model is in modelKeys.
+        // BUT modelKey is not easily stored on box object implicitly.
+        // We'll rely on global "hoverModelColor" or just draw it.
+        // Better: check ownership or just draw. To avoid ghosting on wrong view:
+        // We need to know if state.hoverBox belongs to one of modelKeys.
+
+        const hoverModelKey = getModelKeyForBox(state.hoverBox);
+        if (hoverModelKey && modelKeys.includes(hoverModelKey)) {
+            drawSingleBox(context, hoverModelKey, state.hoverBox, state.hoverModelColor || 'white', scaleFactor, true);
+        }
     }
 
-    // Restore context (remove translation/scale)
-    ctx.restore();
+    // Restore context
+    context.restore();
 }
 
-function drawSingleBox(modelKey, box, modelColor, scaleFactor, isHovered) {
+function getModelKeyForBox(box) {
+    for (const [key, boxes] of Object.entries(state.annotations)) {
+        if (boxes.includes(box)) return key;
+    }
+    return null;
+}
+
+function drawSingleBox(context, modelKey, box, modelColor, scaleFactor, isHovered) {
     if (!state.filters.classes.has(box.class)) return;
     if (box.conf < state.confidence) return;
 
     const isHidden = state.hiddenBoxes.has(box);
     let color = state.classColors[box.class] || modelColor;
 
-    ctx.save();
+    context.save();
 
     // Line Widths
     const baseLineWidth = state.lineWidth * scaleFactor;
     const baseFontSize = state.fontSize * scaleFactor;
 
-    ctx.font = `bold ${baseFontSize}px Arial`;
+    context.font = `bold ${baseFontSize}px Arial`;
 
     // Flag Check
     const boxId = getBoxId(modelKey, box);
     const isFlagged = state.flaggedBoxes.has(boxId);
 
     if (isFlagged) {
-        ctx.setLineDash([8 * scaleFactor, 4 * scaleFactor]);
+        context.setLineDash([8 * scaleFactor, 4 * scaleFactor]);
     } else {
-        ctx.setLineDash([]);
+        context.setLineDash([]);
     }
 
     if (isHidden) {
-        ctx.globalAlpha = state.ghostOpacity;
-        ctx.strokeStyle = '#888';
-        ctx.fillStyle = 'transparent';
+        context.globalAlpha = state.ghostOpacity;
+        context.strokeStyle = '#888';
+        context.fillStyle = 'transparent';
     } else {
-        ctx.globalAlpha = 1.0;
-        ctx.strokeStyle = color;
-        ctx.fillStyle = color;
+        context.globalAlpha = 1.0;
+        context.strokeStyle = color;
+        context.fillStyle = color;
     }
 
     if (isHovered) {
-        ctx.lineWidth = baseLineWidth + (2 * scaleFactor);
+        context.lineWidth = baseLineWidth + (2 * scaleFactor);
         if (isHidden) {
-            ctx.strokeStyle = '#fff';
-            ctx.globalAlpha = state.ghostOpacity + 0.3;
+            context.strokeStyle = '#fff';
+            context.globalAlpha = state.ghostOpacity + 0.3;
         }
     } else {
-        ctx.lineWidth = baseLineWidth;
+        context.lineWidth = baseLineWidth;
     }
 
     const [x, y, w, h] = box.bbox;
-    ctx.strokeRect(x, y, w, h);
+    context.strokeRect(x, y, w, h);
 
     // Draw Label
     if (!isHidden && (state.showLabels || state.showScores)) {
@@ -890,9 +1059,9 @@ function drawSingleBox(modelKey, box, modelColor, scaleFactor, isHovered) {
         if (state.showLabels) labelText += box.class;
         if (state.showScores) labelText += (labelText ? " " : "") + box.conf.toFixed(2);
 
-        ctx.fillStyle = color;
+        context.fillStyle = color;
 
-        const textMetrics = ctx.measureText(labelText);
+        const textMetrics = context.measureText(labelText);
         const textHeight = baseFontSize * 1.2;
         const pad = 5 * scaleFactor;
         const textWidth = textMetrics.width + (pad * 2);
@@ -906,36 +1075,43 @@ function drawSingleBox(modelKey, box, modelColor, scaleFactor, isHovered) {
             textY = y + textHeight - (textHeight * 0.2);
         }
 
-        ctx.fillRect(x, lblY, textWidth, textHeight);
-        ctx.fillStyle = '#000';
-        ctx.fillText(labelText, x + pad, textY);
+        context.fillRect(x, lblY, textWidth, textHeight);
+        context.fillStyle = '#000';
+        context.fillText(labelText, x + pad, textY);
     }
-    ctx.restore();
+    context.restore();
 }
 
 function updateTransform() {
-    // Only apply transform to the container (image), NOT the canvas
-    // Canvas is static, we transform the context inside 'draw'
-    els.container.style.transform = `translate(${state.transform.x}px, ${state.transform.y}px) scale(${state.transform.scale})`;
+    // Only apply transform to the IMAGE, NOT the canvas, and NOT the wrapper (container)
+    // The wrapper defines the viewport/clipping area.
+    // The canvas is fixed to the wrapper. We transform the context in 'draw'.
+
+    // Apply transform to BOTH images
+    if (els.imgLeft) els.imgLeft.style.transform = `translate(${state.transform.x}px, ${state.transform.y}px) scale(${state.transform.scale})`;
+    if (els.imgRight) els.imgRight.style.transform = `translate(${state.transform.x}px, ${state.transform.y}px) scale(${state.transform.scale})`;
+
+    // Ensure containers are NOT transformed (clean up if previously set)
+    els.containerLeft.style.transform = 'none';
+    els.containerRight.style.transform = 'none';
+
     draw(); // Re-draw with new transform
 }
 
 // Check if x,y is inside box OR label
-function getBoxAt(screenX, screenY, onlyVisible = false) {
+function getBoxAt(screenX, screenY, modelKeys, onlyVisible = false) {
     let hitBox = null;
 
     // Convert screen coordinates to IMAGE coordinates
     const imgX = (screenX - state.transform.x) / state.transform.scale;
     const imgY = (screenY - state.transform.y) / state.transform.scale;
 
-    const sortedKeys = Object.keys(state.modelsConfig).sort();
-
     // Scale factor for label calc (labels are in image space)
     const scaleFactor = 1 / state.transform.scale;
     const baseFontSize = state.fontSize * scaleFactor;
 
-    sortedKeys.forEach(key => {
-        if (!state.visibleModels[key]) return;
+    modelKeys.forEach(key => {
+        // If passed modelKeys, we assume they are visible/active for this query
         const boxes = state.annotations[key];
         if (!boxes) return;
 
@@ -951,23 +1127,18 @@ function getBoxAt(screenX, screenY, onlyVisible = false) {
 
             // 2. Label Hit (if showing)
             if (!isHit && !state.hiddenBoxes.has(box) && (state.showLabels || state.showScores)) {
-
-                // Re-calc label
-                // Need to match draw logic carefully
-                ctx.font = `bold ${baseFontSize}px Arial`;
+                // ... label calc same as before ...
+                ctxLeft.font = `bold ${baseFontSize}px Arial`; // Use any ctx for measure
                 let labelText = "";
                 if (state.showLabels) labelText += box.class;
                 if (state.showScores) labelText += (labelText ? " " : "") + box.conf.toFixed(2);
-
-                const textMetrics = ctx.measureText(labelText);
+                const textMetrics = ctxLeft.measureText(labelText);
                 const textHeight = baseFontSize * 1.2;
                 const pad = 5 * scaleFactor;
                 const textWidth = textMetrics.width + (pad * 2);
 
                 let lblY = by - textHeight;
-                if (by < textHeight) {
-                    lblY = by;
-                }
+                if (by < textHeight) { lblY = by; }
 
                 if (imgX >= bx && imgX <= bx + textWidth && imgY >= lblY && imgY <= lblY + textHeight) {
                     isHit = true;
@@ -982,72 +1153,43 @@ function getBoxAt(screenX, screenY, onlyVisible = false) {
     return hitBox;
 }
 
-function handleCanvasClick(e) {
-    const rect = els.canvas.getBoundingClientRect();
+function handleCanvasClick(e, targetCanvas) {
+    const rect = targetCanvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // Toggle hide/show
-    // "onlyVisible=true" logic in old code was: find a box, if found, hide it. 
-    // But if we want to toggle (unhide), we need to check hidden ones too.
-    // The user said: "I can hide using bbox...". 
-    // If I click a hidden box (ghost), I want to unhide it.
-    // If I click a visible box, I want to hide it.
+    // Determine relevant models based on targetCanvas
+    let modelKeys = [];
+    if (state.comparisonMode) {
+        if (targetCanvas === els.canvasLeft && state.compareModelLeft) modelKeys = [state.compareModelLeft];
+        else if (targetCanvas === els.canvasRight && state.compareModelRight) modelKeys = [state.compareModelRight];
+    } else {
+        modelKeys = Object.keys(state.modelsConfig).filter(k => state.visibleModels[k]);
+    }
 
-    // Let's search ALL boxes (onlyVisible=false).
-    const box = getBoxAt(x, y, false);
+    const box = getBoxAt(x, y, modelKeys, false);
     console.log("Click at", x, y, "Found box:", box);
 
     if (box) {
+        // ... existing box logic ...
+        // COPY EXISTING LOGIC HERE but use box directly
         if (state.flagMode) {
-            console.log("Flag Mode Active. Searching for modelKey...");
-            // Flagging Mode
-            // We need modelKey to generate ID. getBoxAt returns just the box object.
-            // We need to modify getBoxAt to return {box, modelKey} or search again.
-            // Let's modify getBoxAt to return modelKey too.
-            // START PATCH: Updating getBoxAt to return more info? 
-            // Or just find the modelKey here.
-
-            // Re-find modelKey for this box
-            let foundKey = null;
-            Object.entries(state.annotations).forEach(([k, boxes]) => {
-                if (boxes.includes(box)) foundKey = k;
-            });
-
-            console.log("Found Key:", foundKey);
-
+            // ... flag logic ...
+            let foundKey = getModelKeyForBox(box);
             if (foundKey) {
                 const id = getBoxId(foundKey, box);
-                console.log("Generated ID:", id);
-                if (state.flaggedBoxes.has(id)) {
-                    console.log("Unflagging...");
-                    state.flaggedBoxes.delete(id);
-                } else {
-                    console.log("Flagging...");
-                    state.flaggedBoxes.add(id);
-                }
-                // Auto-save when flagging?
-                // existing updateQAState saves status + comment. 
-                // We need to trigger save with current status.
-                const currentQA = state.qaData[state.currentImage] || {};
-                console.log("Saving QA status...", currentQA);
-                updateQAState(currentQA.status, currentQA.comment); // This actually triggers save
-                draw();
-            } else {
-                console.error("Could not find model key for box:", box);
-            }
+                if (state.flaggedBoxes.has(id)) state.flaggedBoxes.delete(id);
+                else state.flaggedBoxes.add(id);
 
-        } else {
-            // Normal Hide Mode
-            if (state.hiddenBoxes.has(box)) {
-                state.hiddenBoxes.delete(box);
-            } else {
-                state.hiddenBoxes.add(box);
+                const currentQA = state.qaData[state.currentImage] || {};
+                updateQAState(currentQA.status, currentQA.comment);
+                draw();
             }
+        } else {
+            if (state.hiddenBoxes.has(box)) state.hiddenBoxes.delete(box);
+            else state.hiddenBoxes.add(box);
             draw();
         }
-    } else {
-        console.log("No box found at click");
     }
 }
 
@@ -1055,7 +1197,9 @@ function toggleFlagMode() {
     state.flagMode = !state.flagMode;
     els.btnFlagMode.classList.toggle('active', state.flagMode);
     // Optional: Change cursor?
-    els.canvas.style.cursor = state.flagMode ? 'crosshair' : 'grab';
+    const cursor = state.flagMode ? 'crosshair' : 'grab';
+    if (els.canvasLeft) els.canvasLeft.style.cursor = cursor;
+    if (els.canvasRight) els.canvasRight.style.cursor = cursor;
     saveSettings();
 }
 
@@ -1072,7 +1216,11 @@ function handleCanvasDblClick(e) {
     // Wait, let's keep it safe. 
     // Re-implementing exactly as before but with label support:
 
-    const rect = els.canvas.getBoundingClientRect();
+    // Re-implementing exactly as before but with label support:
+
+    // Use event target to get rect
+    const target = e.target; // Should be the canvas
+    const rect = target.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
@@ -1205,109 +1353,130 @@ function setupEventListeners() {
         };
     }
 
-    const container = els.container;
+    els.btnCompare.onclick = toggleComparisonMode;
+
+    const container = els.container; // Legacy or unused?
     let rawStartX = 0;
     let rawStartY = 0;
 
-    // INTERACTION ON CANVAS
-    // Since canvas is now on top of everything, it catches all mouse events.
-    // We attach listeners to the CANVAS now.
+    // Attach listeners to BOTH canvases
+    [els.canvasLeft, els.canvasRight].forEach(canvas => {
+        canvas.ondblclick = (e) => {
+            e.preventDefault();
+            // Handle double click? same logic as single/toggle? 
+            // Reuse handleCanvasClick essentially or ignore.
+        };
 
+        canvas.onwheel = (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
 
+            const scaleAmount = -e.deltaY * 0.001;
+            let newScale = state.transform.scale + (scaleAmount * state.transform.scale);
+            newScale = Math.min(Math.max(0.1, newScale), 10);
 
-    els.canvas.ondblclick = (e) => {
-        e.preventDefault();
-        handleCanvasDblClick(e);
-    };
+            const pX = (mx - state.transform.x) / state.transform.scale;
+            const pY = (my - state.transform.y) / state.transform.scale;
 
-    els.canvas.onwheel = (e) => {
-        e.preventDefault();
+            state.transform.x = mx - pX * newScale;
+            state.transform.y = my - pY * newScale;
+            state.transform.scale = newScale;
 
-        const rect = els.canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
+            updateTransform();
+        };
 
-        const scaleAmount = -e.deltaY * 0.001;
-        let newScale = state.transform.scale + (scaleAmount * state.transform.scale);
-        newScale = Math.min(Math.max(0.1, newScale), 10);
+        canvas.onmousedown = (e) => {
+            e.preventDefault();
+            state.transform.isDragging = true;
+            state.transform.startX = e.clientX - state.transform.x;
+            state.transform.startY = e.clientY - state.transform.y;
+            rawStartX = e.clientX;
+            rawStartY = e.clientY;
 
-        // Zoom to mouse logic
-        // P_img = (Mouse - OldTx) / OldScale
-        // NewTx = Mouse - P_img * NewScale
-        const pX = (mx - state.transform.x) / state.transform.scale;
-        const pY = (my - state.transform.y) / state.transform.scale;
-
-        state.transform.x = mx - pX * newScale;
-        state.transform.y = my - pY * newScale;
-        state.transform.scale = newScale;
-
-        updateTransform();
-    };
-
-    els.canvas.onmousedown = (e) => {
-        console.log("MouseDown", e.clientX, e.clientY);
-        e.preventDefault();
-        state.transform.isDragging = true;
-
-        // startX/Y needs to be the 'translated' screen pos vs mouse?
-        // Logic: transform.x (offset) = Mouse - stored_diff
-        // When drag starts, stored_diff (startX) = Mouse - transform.x
-        state.transform.startX = e.clientX - state.transform.x;
-        state.transform.startY = e.clientY - state.transform.y;
-
-        rawStartX = e.clientX;
-        rawStartY = e.clientY;
-        els.canvas.style.cursor = 'grabbing';
-    };
+            els.canvasLeft.style.cursor = 'grabbing';
+            els.canvasRight.style.cursor = 'grabbing';
+        };
+    });
 
     window.onmousemove = (e) => {
-        if (!state.transform.isDragging) {
-            const rect = els.canvas.getBoundingClientRect();
-            if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-                // Coordinate on screen (canvas)
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
+        // Dragging Logic (Global)
+        if (state.transform.isDragging) {
+            state.transform.x = e.clientX - state.transform.startX;
+            state.transform.y = e.clientY - state.transform.startY;
+            updateTransform();
+            return;
+        }
 
-                const box = getBoxAt(x, y, false);
-                if (box !== state.hoverBox) {
-                    state.hoverBox = box;
-                    draw();
-                }
-            } else if (state.hoverBox) {
+        // Hover Logic (Check which canvas we are over)
+        // Find which canvas is under mouse
+        const rectLeft = els.canvasLeft.getBoundingClientRect();
+        const rectRight = els.canvasRight.getBoundingClientRect();
+
+        let targetCanvas = null;
+        if (e.clientX >= rectLeft.left && e.clientX <= rectLeft.right && e.clientY >= rectLeft.top && e.clientY <= rectLeft.bottom) {
+            targetCanvas = els.canvasLeft;
+        } else if (state.comparisonMode && e.clientX >= rectRight.left && e.clientX <= rectRight.right && e.clientY >= rectRight.top && e.clientY <= rectRight.bottom) {
+            targetCanvas = els.canvasRight;
+        }
+
+        if (targetCanvas) {
+            const x = e.clientX - targetCanvas.getBoundingClientRect().left;
+            const y = e.clientY - targetCanvas.getBoundingClientRect().top;
+
+            let modelKeys = [];
+            if (state.comparisonMode) {
+                if (targetCanvas === els.canvasLeft && state.compareModelLeft) modelKeys = [state.compareModelLeft];
+                else if (targetCanvas === els.canvasRight && state.compareModelRight) modelKeys = [state.compareModelRight];
+            } else {
+                modelKeys = Object.keys(state.modelsConfig).filter(k => state.visibleModels[k]);
+            }
+
+            const box = getBoxAt(x, y, modelKeys, false);
+            if (box !== state.hoverBox) {
+                state.hoverBox = box;
+                draw();
+            }
+        } else {
+            if (state.hoverBox) {
                 state.hoverBox = null;
                 draw();
             }
         }
-
-        if (!state.transform.isDragging) return;
-        state.transform.x = e.clientX - state.transform.startX;
-        state.transform.y = e.clientY - state.transform.startY;
-        updateTransform();
     };
 
     window.onmouseup = (e) => {
-        console.log("MouseUp", e.clientX, e.clientY, "Dragging:", state.transform.isDragging);
         if (state.transform.isDragging) {
             const dist = Math.abs(e.clientX - rawStartX) + Math.abs(e.clientY - rawStartY);
-            console.log("Drag Dist:", dist);
             if (dist < 5) {
-                console.log("Triggering handleCanvasClick form MouseUp");
-                handleCanvasClick(e);
+                // Determine which canvas was clicked
+                // We can check boundaries again
+                const rectLeft = els.canvasLeft.getBoundingClientRect();
+                const rectRight = els.canvasRight.getBoundingClientRect();
+
+                if (e.clientX >= rectLeft.left && e.clientX <= rectLeft.right && e.clientY >= rectLeft.top && e.clientY <= rectLeft.bottom) {
+                    handleCanvasClick(e, els.canvasLeft);
+                } else if (state.comparisonMode && e.clientX >= rectRight.left && e.clientX <= rectRight.right && e.clientY >= rectRight.top && e.clientY <= rectRight.bottom) {
+                    handleCanvasClick(e, els.canvasRight);
+                }
             }
         }
         state.transform.isDragging = false;
-        els.canvas.style.cursor = 'grab';
-        if (state.flagMode) els.canvas.style.cursor = 'crosshair';
 
-        debouncedSaveSettings(); // Save transform on drag end
+        els.canvasLeft.style.cursor = state.flagMode ? 'crosshair' : 'grab';
+        els.canvasRight.style.cursor = state.flagMode ? 'crosshair' : 'grab';
+
+        debouncedSaveSettings();
     };
-    els.canvas.style.cursor = 'grab';
+    // els.canvas.style.cursor = 'grab'; // Removed undefined ref
 
     const ro = new ResizeObserver(() => {
         // Observe main view resize, not just img
         resizeCanvas();
     });
-    ro.observe(els.mainView);
+    // if (els.img) ro.observe(els.img); // els.img is undefined
+    if (els.mainView) ro.observe(els.mainView);
 }
 
 // Start
