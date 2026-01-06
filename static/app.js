@@ -155,6 +155,9 @@ async function init() {
         // Let's defer layout to CSS classes, but ensure defaults here.
     });
 
+    // Init Unhide Button State
+    updateUnhideButtonState();
+
     // Init Resizer
     if (els.sidebarResizer) {
         els.sidebarResizer.onmousedown = (e) => {
@@ -481,6 +484,7 @@ function loadImage(filename) {
 
     // Reset hidden boxes on image change? Yes usually
     state.hiddenBoxes.clear();
+    updateUnhideButtonState();
 
     renderImageList(); // Update active class
     updateQAUI(); // Update footer
@@ -1242,6 +1246,7 @@ function handleCanvasClick(e, targetCanvas) {
         } else {
             if (state.hiddenBoxes.has(box)) state.hiddenBoxes.delete(box);
             else state.hiddenBoxes.add(box);
+            updateUnhideButtonState();
             draw();
         }
     }
@@ -1282,6 +1287,7 @@ function handleCanvasDblClick(e) {
     const box = getBoxAt(x, y, false);
     if (box && state.hiddenBoxes.has(box)) {
         state.hiddenBoxes.delete(box);
+        updateUnhideButtonState();
         draw();
     }
 }
@@ -1310,6 +1316,7 @@ function setupEventListeners() {
     if (els.btnUnhideAll) {
         els.btnUnhideAll.onclick = () => {
             state.hiddenBoxes.clear();
+            updateUnhideButtonState();
             draw();
         };
     }
@@ -1549,14 +1556,24 @@ function setupEventListeners() {
         debouncedSaveSettings();
     };
     // els.canvas.style.cursor = 'grab'; // Removed undefined ref
-
-    const ro = new ResizeObserver(() => {
-        // Observe main view resize, not just img
-        resizeCanvas();
-    });
-    // if (els.img) ro.observe(els.img); // els.img is undefined
-    if (els.mainView) ro.observe(els.mainView);
 }
+
+function updateUnhideButtonState() {
+    if (els.btnUnhideAll) {
+        // Active (Blue) if there are hidden boxes, meaning action is available/useful
+        if (state.hiddenBoxes.size > 0) {
+            els.btnUnhideAll.classList.add('active');
+        } else {
+            els.btnUnhideAll.classList.remove('active');
+        }
+    }
+}
+const ro = new ResizeObserver(() => {
+    // Observe main view resize, not just img
+    resizeCanvas();
+});
+// if (els.img) ro.observe(els.img); // els.img is undefined
+if (els.mainView) ro.observe(els.mainView);
 
 // Start
 init();

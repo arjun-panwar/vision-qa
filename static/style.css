@@ -100,9 +100,9 @@ body {
 }
 
 .sidebar.collapsed {
-    width: 0;
-    padding: 0;
-    border-right: none;
+    width: 0 !important;
+    padding: 0 !important;
+    border-right: none !important;
 }
 
 .sidebar-header {
@@ -414,6 +414,7 @@ input[type=range] {
     border: 1px solid var(--border);
     border-radius: 4px;
 }
+
 /* Canvas Model Selectors */
 .view-label-select {
     appearance: none;
@@ -422,7 +423,8 @@ input[type=range] {
     background: rgba(0, 0, 0, 0.6);
     color: white;
     border: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 4px 24px 4px 8px; /* Extra padding right for arrow */
+    padding: 4px 24px 4px 8px;
+    /* Extra padding right for arrow */
     border-radius: 4px;
     font-size: 0.9rem;
     cursor: pointer;
@@ -450,8 +452,13 @@ input[type=range] {
 }
 
 @keyframes flash-green {
-    0% { background-color: rgba(0, 255, 0, 0.1); }
-    100% { background-color: transparent; }
+    0% {
+        background-color: rgba(0, 255, 0, 0.1);
+    }
+
+    100% {
+        background-color: transparent;
+    }
 }
 
 /* Sidebar Resizer */
@@ -464,6 +471,17 @@ input[type=range] {
     flex-shrink: 0;
 }
 
-.resizer:hover, .resizer.resizing {
+.resizer:hover,
+.resizer.resizing {
     background: var(--accent);
+}
+
+/* Button Active States (Blue when active) */
+#btn-compare.active,
+#btn-compare:hover,
+#btn-unhide-all.active,
+#btn-unhide-all:hover {
+    background-color: var(--accent);
+    color: white;
+    border-color: var(--accent);
 }
