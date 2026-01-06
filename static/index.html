@@ -99,9 +99,8 @@
             <div id="canvas-container-left" class="canvas-wrapper">
                 <img id="source-image-left" src="" alt="Select an image" />
                 <canvas id="overlay-canvas-left"></canvas>
-                <div id="label-left" class="view-label"
-                    style="display: none; position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 2px 6px; border-radius: 4px; pointer-events: none;">
-                    Left Model</div>
+                <select id="model-select-left" class="view-label-select" title="Select Left Model"
+                    style="display: none; position: absolute; top: 10px; right: 10px; z-index: 101;"></select>
             </div>
 
             <!-- Right Canvas (Secondary - Helper for Split View) -->
@@ -109,9 +108,8 @@
                 style="display: none; border-left: 2px solid var(--border);">
                 <img id="source-image-right" src="" alt="Select an image" />
                 <canvas id="overlay-canvas-right"></canvas>
-                <div id="label-right" class="view-label"
-                    style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 2px 6px; border-radius: 4px; pointer-events: none;">
-                    Right</div>
+                <select id="model-select-right" class="view-label-select" title="Select Right Model"
+                    style="position: absolute; top: 10px; right: 10px; z-index: 101;"></select>
             </div>
         </main>
 
