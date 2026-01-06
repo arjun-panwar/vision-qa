@@ -495,7 +495,7 @@ function navigateImage(offset) {
     }
 }
 
-function fitImageToScreen() {
+function fitImageToScreen(force = false) {
     // Use lef image as reference
     const img = els.imgLeft;
     if (!img || !els.mainView) return;
@@ -531,9 +531,9 @@ function fitImageToScreen() {
     const scaleY = availH / imgH;
     const fitScale = Math.min(scaleX, scaleY);
 
-    // Only fit to screen if we are in a default/reset state (scale 1).
+    // Only fit to screen if forced or if we are in a default/reset state (scale 1).
     // This allows persisted views (loaded from config) to be respected.
-    if (state.transform.scale === 1 && state.transform.x === 0 && state.transform.y === 0) {
+    if (force || (state.transform.scale === 1 && state.transform.x === 0 && state.transform.y === 0)) {
         state.transform.scale = fitScale;
         state.transform.x = (viewWidth - imgW * fitScale) / 2;
         state.transform.y = (viewHeight - imgH * fitScale) / 2;
@@ -1349,7 +1349,7 @@ function setupEventListeners() {
     }
     if (btnResetView) {
         btnResetView.onclick = () => {
-            fitImageToScreen();
+            fitImageToScreen(true);
         };
     }
 
