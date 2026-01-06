@@ -45,6 +45,7 @@ const state = {
     // Let's persist sidebar states too if we can
     leftSidebarOpen: true,
     rightSidebarOpen: true,
+    isResizingSidebar: false, // Sidebar resize state
 
     // Flagging
     flagMode: false,
@@ -59,6 +60,7 @@ const state = {
 // DOM Elements
 const els = {
     sidebarLeft: document.querySelector('.sidebar'),
+    sidebarResizer: document.getElementById('sidebar-resizer'),
     sidebarRight: document.querySelector('.controls'),
     btnToggleLeft: document.getElementById('btn-toggle-left'),
     btnToggleRight: document.getElementById('btn-toggle-right'),
@@ -152,6 +154,16 @@ async function init() {
         // For SPLIT view, we want them relative/flex.
         // Let's defer layout to CSS classes, but ensure defaults here.
     });
+
+    // Init Resizer
+    if (els.sidebarResizer) {
+        els.sidebarResizer.onmousedown = (e) => {
+            state.isResizingSidebar = true;
+            els.sidebarResizer.classList.add('resizing');
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        };
+    }
 
     await fetchConfig();
     await fetchImageList(); // Also fetches QA data implicitly if tied, but we'll fetch QA separately first
@@ -1451,6 +1463,20 @@ function setupEventListeners() {
             return;
         }
 
+        // Sidebar Resizing
+        if (state.isResizingSidebar) {
+            e.preventDefault();
+            const newWidth = Math.max(150, Math.min(e.clientX, 600)); // Clamp width
+            els.sidebarLeft.style.width = `${newWidth}px`;
+
+            // Debounced resize canvas (or just wait for mouseup? No, usually expect reactive)
+            // But canvas resize involves re-fitting. We might want to defer re-fit.
+            // For now, let's just let the layout flow, but re-render/resizeCanvas might be needed IF size changes significantly.
+            // Actually, we should call resizeCanvas at the END of drag, or maybe throttle it.
+            // Let's just update the width for now, and handle canvas update on mouseup.
+            return;
+        }
+
         // Hover Logic (Check which canvas we are over)
         // Find which canvas is under mouse
         const rectLeft = els.canvasLeft.getBoundingClientRect();
@@ -1505,6 +1531,17 @@ function setupEventListeners() {
             }
         }
         state.transform.isDragging = false;
+
+        // Sidebar Resize End
+        if (state.isResizingSidebar) {
+            state.isResizingSidebar = false;
+            els.sidebarResizer.classList.remove('resizing');
+            document.body.style.cursor = 'default';
+            resizeCanvas(); // Refit canvas to new space
+            fitImageToScreen();
+
+            // Persist sidebar width? Maybe later.
+        }
 
         els.canvasLeft.style.cursor = state.flagMode ? 'crosshair' : 'grab';
         els.canvasRight.style.cursor = state.flagMode ? 'crosshair' : 'grab';

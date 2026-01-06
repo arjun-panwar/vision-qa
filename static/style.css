@@ -453,3 +453,17 @@ input[type=range] {
     0% { background-color: rgba(0, 255, 0, 0.1); }
     100% { background-color: transparent; }
 }
+
+/* Sidebar Resizer */
+.resizer {
+    width: 6px;
+    background: var(--border);
+    cursor: col-resize;
+    z-index: 100;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.resizer:hover, .resizer.resizing {
+    background: var(--accent);
+}
