@@ -72,6 +72,8 @@ const els = {
     imgRight: document.getElementById('source-image-right'),
     canvasRight: document.getElementById('overlay-canvas-right'),
     containerRight: document.getElementById('canvas-container-right'),
+    labelLeft: document.getElementById('label-left'),
+    labelRight: document.getElementById('label-right'),
 
     mainView: document.querySelector('.main-view'),
 
@@ -745,6 +747,12 @@ function toggleComparisonMode() {
         els.mainView.classList.add('split-view');
         els.containerRight.style.display = 'block'; // Show right view
 
+        // Show labels
+        const labelL = document.getElementById('label-left');
+        const labelR = document.getElementById('label-right');
+        if (labelL) labelL.style.display = 'block';
+        if (labelR) labelR.style.display = 'block';
+
         // Populate selects if empty
         if (els.selectModelLeft.options.length === 0) populateModelSelects();
 
@@ -756,9 +764,25 @@ function toggleComparisonMode() {
         els.selectModelLeft.value = state.compareModelLeft;
         els.selectModelRight.value = state.compareModelRight;
 
+        // Set label text
+        if (labelL) {
+            const nameL = state.modelsConfig[state.compareModelLeft] ? (state.modelsConfig[state.compareModelLeft].name || state.compareModelLeft) : state.compareModelLeft;
+            labelL.textContent = nameL;
+        }
+        if (labelR) {
+            const nameR = state.modelsConfig[state.compareModelRight] ? (state.modelsConfig[state.compareModelRight].name || state.compareModelRight) : state.compareModelRight;
+            labelR.textContent = nameR;
+        }
+
     } else {
         els.mainView.classList.remove('split-view');
         els.containerRight.style.display = 'none';
+
+        // Hide labels
+        const labelL = document.getElementById('label-left');
+        const labelR = document.getElementById('label-right');
+        if (labelL) labelL.style.display = 'none';
+        if (labelR) labelR.style.display = 'none';
     }
 
     // Refit after layout change
@@ -796,10 +820,18 @@ function populateModelSelects() {
 
     els.selectModelLeft.onchange = (e) => {
         state.compareModelLeft = e.target.value;
+        if (els.labelLeft) {
+            const name = state.modelsConfig[state.compareModelLeft] ? (state.modelsConfig[state.compareModelLeft].name || state.compareModelLeft) : state.compareModelLeft;
+            els.labelLeft.textContent = name;
+        }
         draw();
     };
     els.selectModelRight.onchange = (e) => {
         state.compareModelRight = e.target.value;
+        if (els.labelRight) {
+            const name = state.modelsConfig[state.compareModelRight] ? (state.modelsConfig[state.compareModelRight].name || state.compareModelRight) : state.compareModelRight;
+            els.labelRight.textContent = name;
+        }
         draw();
     };
 }
