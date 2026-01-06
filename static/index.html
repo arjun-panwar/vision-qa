@@ -63,12 +63,6 @@
 
         <!-- Right: Actions -->
         <div class="top-bar-right">
-            <div id="compare-controls" style="display: none; align-items: center; gap: 10px; margin-right: 15px;">
-                <select id="select-model-left" class="model-select" title="Left Model"></select>
-                <span style="color: var(--text-muted);">vs</span>
-                <select id="select-model-right" class="model-select" title="Right Model"></select>
-            </div>
-            <button id="btn-compare" class="btn-primary" style="margin-right: 10px;">Compare</button>
             <button id="btn-load-project" class="btn-primary" style="margin-right: 10px;">Load Project</button>
             <button id="btn-toggle-right" class="btn-icon" title="Toggle Controls">☰</button>
         </div>
@@ -114,11 +108,15 @@
         </main>
 
         <!-- Right Control Panel -->
+        <!-- Right Control Panel -->
         <aside class="controls">
-            <h2>Controls</h2>
 
             <div class="control-group">
-                <h3>Models</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="margin: 0;">Models</h3>
+                    <button id="btn-compare" class="btn-primary"
+                        style="font-size: 0.8rem; padding: 4px 8px;">Compare</button>
+                </div>
                 <div id="model-toggles">
                     <!-- Dynamic model toggles -->
                 </div>

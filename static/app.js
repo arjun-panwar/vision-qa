@@ -81,12 +81,8 @@ const els = {
 
     // Comparison Controls
     btnCompare: document.getElementById('btn-compare'),
-    compareControls: document.getElementById('compare-controls'),
-    // Old selects removed from els, we use the canvas ones now mapped to selectModelLeft/Right
-    // But wait, the OLD select IDs were select-model-left. The NEW ones are model-select-left.
-    // I mapped selectModelLeft to the NEW ID above. So existing code using els.selectModelLeft will target the NEW select.
-    // However, I need to make sure I don't try to access the OLD element if I removed it or if I want to hide it.
-    // The old compareControls div is still there, I should hide it.
+    // Comparison Controls
+    btnCompare: document.getElementById('btn-compare'),
 
     modelToggles: document.getElementById('model-toggles'),
     confSlider: document.getElementById('conf-slider'),
@@ -743,7 +739,7 @@ function toggleComparisonMode() {
 
     // UI Updates
     els.btnCompare.classList.toggle('active', state.comparisonMode);
-    els.compareControls.style.display = state.comparisonMode ? 'flex' : 'none';
+    // compareControls removed
     els.containerRight.style.display = state.comparisonMode ? 'block' : 'none';
     // Wait, els definition is els.containerRight defined in Step 47-ish.
     // Check definition: els.containerRight. In index.html: style="display: none; ..."
@@ -756,8 +752,9 @@ function toggleComparisonMode() {
         if (els.selectModelLeft) els.selectModelLeft.style.display = 'block';
         if (els.selectModelRight) els.selectModelRight.style.display = 'block';
 
-        // Hide top bar controls (redundant now)
-        els.compareControls.style.display = 'none';
+        if (els.selectModelRight) els.selectModelRight.style.display = 'block';
+
+        // compareControls logic removed
 
         // Populate selects if empty
         if (els.selectModelLeft.options.length === 0) populateModelSelects();
