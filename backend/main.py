@@ -120,11 +120,24 @@ async def get_config():
     """Returns the current project configuration including known models and labels."""
     # Always refresh on config fetch to catch manual edits
     state.refresh()
+
+    # Load global app config dynamically to catch updates
+    app_config = {}
+    if os.path.exists("app_config.json"):
+        try:
+            with open("app_config.json", "r") as f:
+                app_config = json.load(f)
+        except Exception as e:
+            print(f"Failed to reload app_config.json: {e}")
+    
+    # Merge global APP_CONFIG into settings for frontend
+    settings = getattr(state, "viz_settings", {}).copy()
+    settings.update(app_config)
     
     return {
         "models": state.models,
         "labels": state.labels,
-        "settings": getattr(state, "viz_settings", {}),
+        "settings": settings,
         "loaded": state.root_dir is not None
     }
 
@@ -135,11 +148,24 @@ async def save_settings(req: SaveSettingsRequest):
     
     settings_path = os.path.join(state.root_dir, "viz_config.json")
     try:
+        # We only save visual settings. APP_CONFIG is read-only from backend perspective here.
+        # Frontend might send back app_name merged in settings, so we should ideally filter it out?
+        # But for now, let's just save what frontend sends minus known global keys if we want to be strict.
+        # OR: Just trust frontend? 
+        # Better: Filter out keys that belong to APP_CONFIG to keep viz_config.json clean.
+        
+        data_to_save = req.settings.copy()
+        # Remove global config keys to prevent them from leaking into project config
+        keys_to_remove = ["app_name", "ui_constraints"]
+        for k in keys_to_remove:
+            if k in data_to_save:
+                del data_to_save[k]
+                
         with open(settings_path, "w") as f:
-            json.dump(req.settings, f, indent=4)
+            json.dump(data_to_save, f, indent=4)
         
         # Update in-memory state
-        state.viz_settings = req.settings
+        state.viz_settings = data_to_save
         return {"status": "success", "message": "Settings saved"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

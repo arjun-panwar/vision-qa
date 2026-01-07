@@ -187,6 +187,7 @@ async function fetchConfig() {
 
         // Load Settings
         if (data.settings) {
+            applyStaticConfig(data.settings);
             applyVisualSettings(data.settings);
         }
 
@@ -943,6 +944,37 @@ function applyVisualSettings(settings) {
 
     // Update UI controls to match loaded state
     updateVisualControls();
+}
+
+function applyStaticConfig(settings) {
+    if (!settings) return;
+
+    // App Name
+    if (settings.app_name) {
+        document.title = settings.app_name;
+        const headerTitle = document.querySelector('.top-bar-left span');
+        if (headerTitle) headerTitle.textContent = settings.app_name;
+    }
+
+    // UI Constraints
+    if (settings.ui_constraints) {
+        const c = settings.ui_constraints;
+
+        if (c.thickness && els.sliderThickness) {
+            if (c.thickness.min !== undefined) els.sliderThickness.min = c.thickness.min;
+            if (c.thickness.max !== undefined) els.sliderThickness.max = c.thickness.max;
+        }
+
+        if (c.opacity && els.sliderOpacity) {
+            if (c.opacity.min !== undefined) els.sliderOpacity.min = c.opacity.min;
+            if (c.opacity.max !== undefined) els.sliderOpacity.max = c.opacity.max;
+        }
+
+        if (c.fontSize && els.sliderFontSize) {
+            if (c.fontSize.min !== undefined) els.sliderFontSize.min = c.fontSize.min;
+            if (c.fontSize.max !== undefined) els.sliderFontSize.max = c.fontSize.max;
+        }
+    }
 }
 
 function updateVisualControls() {
