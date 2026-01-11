@@ -847,3 +847,79 @@ input[type=range] {
     word-break: break-word;
     color: var(--text-main);
 }
+
+/* -- Color Palette Styles -- */
+
+.color-swatch-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    cursor: pointer;
+    transition: transform 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+}
+
+.color-swatch-btn:hover {
+    transform: scale(1.1);
+    border-color: #fff;
+}
+
+.color-palette-popover {
+    position: absolute;
+    z-index: 2000;
+    background-color: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 160px;
+}
+
+.color-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+}
+
+.color-preset {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: transform 0.2s;
+}
+
+.color-preset:hover {
+    transform: scale(1.2);
+    border-color: #fff;
+}
+
+.color-custom-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.color-custom-btn:hover {
+    background: #383838;
+    color: var(--text-main);
+}
+
+.color-custom-btn svg {
+    width: 14px;
+    height: 14px;
+}

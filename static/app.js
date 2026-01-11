@@ -849,6 +849,9 @@ function renderModelToggles() {
     if (els.modelToggles) els.modelToggles.innerHTML = '';
 }
 
+// Preset Colors for Quick Selection
+let PRESET_COLORS = [];
+
 function renderClassFilters() {
     els.classFilters.innerHTML = '';
     const allLabels = new Set([
@@ -888,9 +891,6 @@ function renderClassFilters() {
             renderClassFilters();
         };
 
-        // Prevent header click from triggering anything unwanted if we had other listeners
-        // But here we just want the input to work.
-
         const labelSpan = document.createElement('span');
         labelSpan.textContent = `Classes (${sortedLabels.length})`;
 
@@ -898,8 +898,7 @@ function renderClassFilters() {
         header.appendChild(labelSpan);
     }
 
-
-    // -- Individual Class Checkboxes --
+    // -- Individual Class Rows --
     sortedLabels.forEach(cls => {
         const count = state.classCounts[cls] || 0;
         if (!state.classColors[cls]) {
@@ -911,6 +910,7 @@ function renderClassFilters() {
         container.style.alignItems = 'center';
         container.style.marginBottom = '4px';
         container.style.justifyContent = 'space-between';
+        container.style.position = 'relative'; // For popover positioning
 
         const leftGroup = document.createElement('div');
         leftGroup.style.display = 'flex';
@@ -930,14 +930,6 @@ function renderClassFilters() {
             draw();
             saveSettings();
 
-            // Re-render essentially to update header state? 
-            // Or just update header input directly?
-            // Re-rendering is safest to keep count/state in sync if logic changes.
-            // But strict re-render might lose focus/scroll? 
-            // renderClassFilters calls innerHTML='' so it rebuilds entire list.
-            // If list is long, might annoy user. 
-            // Let's just update the header checkbox directly here.
-
             const headerCheckbox = document.getElementById('checkbox-toggle-all-header');
             if (headerCheckbox) {
                 const allNow = sortedLabels.every(c => state.filters.classes.has(c));
@@ -955,29 +947,118 @@ function renderClassFilters() {
         leftGroup.appendChild(input);
         leftGroup.appendChild(span);
 
-        const colorPicker = document.createElement('input');
-        colorPicker.type = 'color';
-        colorPicker.value = color;
-        colorPicker.style.border = 'none';
-        colorPicker.style.width = '24px';
-        colorPicker.style.height = '24px';
-        colorPicker.style.padding = '0';
-        colorPicker.style.cursor = 'pointer';
-        colorPicker.style.background = 'none';
-
-        colorPicker.onchange = (e) => { // Auto-save color settings
-            const newColor = e.target.value;
+        // Replace Native Picker with Custom Swatch
+        const colorSwatch = createColorSwatch(cls, color, (newColor) => {
             state.classColors[cls] = newColor;
             input.style.accentColor = newColor;
             draw();
             saveSettings();
-        };
+        });
 
         container.appendChild(leftGroup);
-        container.appendChild(colorPicker);
+        container.appendChild(colorSwatch);
         els.classFilters.appendChild(container);
     });
 }
+
+function createColorSwatch(cls, currentColor, onChange) {
+    const swatch = document.createElement('div');
+    swatch.className = 'color-swatch-btn';
+    swatch.style.backgroundColor = currentColor;
+    swatch.title = "Change Color";
+
+    swatch.onclick = (e) => {
+        e.stopPropagation();
+        // Close other popovers first?
+        const existing = document.querySelectorAll('.color-palette-popover');
+        existing.forEach(el => el.remove());
+
+        const popover = document.createElement('div');
+        popover.className = 'color-palette-popover';
+
+        // Position relative to swatch
+        // We'll append to body or sidebar? 
+        // Best to append to body and absolute position to avoid clipping if sidebar overflows hidden (but sidebar has overflow-y auto)
+        // Let's try appending to the container first, but container has overflow issues?
+        // Actually attaching to body is safer for z-index and overflow.
+        document.body.appendChild(popover);
+
+        const rect = swatch.getBoundingClientRect();
+        popover.style.top = `${rect.bottom + 5}px`;
+        popover.style.left = `${rect.left - 140}px`; // Shift left to align
+
+        // Adjust if offscreen
+        const popRect = popover.getBoundingClientRect();
+        if (popRect.right > window.innerWidth) {
+            popover.style.left = `${window.innerWidth - popRect.width - 10}px`;
+        }
+
+        // 1. Grid of Presets
+        const grid = document.createElement('div');
+        grid.className = 'color-grid';
+
+        PRESET_COLORS.forEach(c => {
+            const dot = document.createElement('div');
+            dot.className = 'color-preset';
+            dot.style.backgroundColor = c;
+            dot.onclick = (ev) => {
+                ev.stopPropagation();
+                onChange(c);
+                swatch.style.backgroundColor = c;
+                popover.remove();
+            };
+            grid.appendChild(dot);
+        });
+        popover.appendChild(grid);
+
+        // Separator
+        const sep = document.createElement('div');
+        sep.style.borderTop = '1px solid var(--border)';
+        sep.style.margin = '4px 0';
+        popover.appendChild(sep);
+
+        // 2. Custom Color Button (Wraps native input)
+        const customBtn = document.createElement('label');
+        customBtn.className = 'color-custom-btn';
+        customBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+            </svg>
+            Custom...
+        `;
+
+        const nativeInput = document.createElement('input');
+        nativeInput.type = 'color';
+        nativeInput.value = currentColor;
+        nativeInput.style.position = 'absolute';
+        nativeInput.style.opacity = '0';
+        nativeInput.style.width = '1px';
+        nativeInput.style.height = '1px';
+
+        nativeInput.onchange = (ev) => {
+            const nc = ev.target.value;
+            onChange(nc);
+            swatch.style.backgroundColor = nc;
+            popover.remove();
+        };
+
+        customBtn.appendChild(nativeInput);
+        popover.appendChild(customBtn);
+
+        // Click outside to close
+        const closeHandler = (ev) => {
+            if (!popover.contains(ev.target) && ev.target !== swatch) {
+                popover.remove();
+                document.removeEventListener('click', closeHandler);
+            }
+        };
+        // Delay adding listener to avoid immediate trigger
+        setTimeout(() => document.addEventListener('click', closeHandler), 0);
+    };
+
+    return swatch;
+}
+
 
 function setMode(mode) {
     const isCompare = (mode === 'compare');
@@ -1245,6 +1326,11 @@ function applyStaticConfig(settings) {
             if (c.fontSize.min !== undefined) els.sliderFontSize.min = c.fontSize.min;
             if (c.fontSize.max !== undefined) els.sliderFontSize.max = c.fontSize.max;
         }
+    }
+
+    // Preset Colors
+    if (settings.preset_colors && Array.isArray(settings.preset_colors)) {
+        PRESET_COLORS = settings.preset_colors;
     }
 }
 
