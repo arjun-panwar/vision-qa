@@ -912,8 +912,10 @@ function setMode(mode) {
         if (!state.compareModelLeft && modelKeys.length > 0) state.compareModelLeft = modelKeys[0];
         if (!state.compareModelRight && modelKeys.length > 0) state.compareModelRight = modelKeys.length > 1 ? modelKeys[1] : modelKeys[0];
 
-        els.selectModelLeft.value = state.compareModelLeft;
-        els.selectModelRight.value = state.compareModelRight;
+        els.selectModelLeft.value = state.compareModelLeft || "";
+        els.selectModelRight.value = state.compareModelRight || "";
+
+        updateModelSelectRules();
 
     } else {
         els.mainView.classList.remove('split-view');
@@ -940,6 +942,17 @@ function populateModelSelects() {
     els.selectModelLeft.innerHTML = '';
     els.selectModelRight.innerHTML = '';
 
+    // Add "None" option
+    const noneOpt1 = document.createElement('option');
+    noneOpt1.value = "";
+    noneOpt1.textContent = "None";
+    els.selectModelLeft.appendChild(noneOpt1);
+
+    const noneOpt2 = document.createElement('option');
+    noneOpt2.value = "";
+    noneOpt2.textContent = "None";
+    els.selectModelRight.appendChild(noneOpt2);
+
     const keys = Object.keys(state.modelsConfig).sort();
 
     keys.forEach(key => {
@@ -958,12 +971,39 @@ function populateModelSelects() {
 
     els.selectModelLeft.onchange = (e) => {
         state.compareModelLeft = e.target.value;
+        updateModelSelectRules();
         draw();
     };
     els.selectModelRight.onchange = (e) => {
         state.compareModelRight = e.target.value;
+        updateModelSelectRules();
         draw();
     };
+
+    updateModelSelectRules();
+}
+
+function updateModelSelectRules() {
+    const leftVal = els.selectModelLeft.value;
+    const rightVal = els.selectModelRight.value;
+
+    // Update Left Options
+    Array.from(els.selectModelLeft.options).forEach(opt => {
+        if (opt.value && opt.value === rightVal) {
+            opt.disabled = true;
+        } else {
+            opt.disabled = false;
+        }
+    });
+
+    // Update Right Options
+    Array.from(els.selectModelRight.options).forEach(opt => {
+        if (opt.value && opt.value === leftVal) {
+            opt.disabled = true;
+        } else {
+            opt.disabled = false;
+        }
+    });
 }
 
 
