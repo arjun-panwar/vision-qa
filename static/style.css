@@ -305,7 +305,7 @@ input[type=range] {
 
 /* QA Footer */
 .qa-footer {
-    height: 60px;
+    height: 80px;
     background-color: var(--bg-panel);
     border-top: 1px solid var(--border);
     display: flex;
@@ -382,13 +382,16 @@ input[type=range] {
 
 .qa-comment {
     flex: 1;
-    max-width: 400px;
+    max-width: 1000px;
+    height: 65px;
     padding: 0.5rem;
     border: 1px solid var(--border);
     background-color: var(--bg-dark);
     color: var(--text-main);
     border-radius: 4px;
     outline: none;
+    resize: none;
+    font-family: inherit;
 }
 
 /* Sidebar QA Status Indicators */
