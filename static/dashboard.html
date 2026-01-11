@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QA Dashboard - Vision Buzz</title>
+    <link rel="stylesheet" href="/static/style.css?v=12">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            /* Override for dashboard specific full screen layout */
+            overflow: hidden;
+            /* No scroll on body */
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+        }
+
+        .dashboard-layout {
+            display: flex;
+            flex-direction: row;
+            /* Side-by-side if we wanted sidebar, but here maybe top-down with grid */
+            flex: 1;
+            overflow: hidden;
+            padding: 0;
+        }
+
+        /* Top Bar matches application style */
+        .dash-top-bar {
+            height: 64px;
+            background-color: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 1rem;
+            flex-shrink: 0;
+        }
+
+        .dash-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        /* Content Area */
+        .dash-content {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            /* Scroll ONLY content if needed, but we aim for single screen */
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        /* Top Metrics Row */
+        .metrics-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .metric-card {
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .metric-info h3 {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+        }
+
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: var(--text-main);
+        }
+
+        .metric-icon {
+            font-size: 2.5rem;
+            color: var(--accent);
+            opacity: 0.2;
+        }
+
+        /* Charts Grid - Fill remaining space */
+        .charts-grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+            /* Ensure it doesn't overflow parent unnecessarily */
+            min-height: 0;
+        }
+
+        .chart-card {
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            /* In single screen, we might need these to scroll internally if too many */
+            min-height: 300px;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .chart-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .chart-meta {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .chart-body {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+            /* Critical for chart.js resizing in flex */
+        }
+
+        .loading-text {
+            color: var(--text-muted);
+            font-style: italic;
+            text-align: center;
+            margin-top: 2rem;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header -->
+    <header class="dash-top-bar">
+        <div class="dash-title">
+            <span>QA Dashboard</span>
+        </div>
+        <div>
+            <button onclick="window.location.href='/'" class="btn-primary"
+                style="font-size: 0.8rem; padding: 2px 8px;">Back to App</button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="dash-content">
+        <!-- Summary Metrics -->
+        <section class="metrics-row">
+            <div class="metric-card">
+                <div class="metric-info">
+                    <h3>Total Images</h3>
+                    <div id="metric-total-images" class="metric-value">0</div>
+                </div>
+                <div class="metric-icon">📁</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-info">
+                    <h3>Reviewed Images</h3>
+                    <div id="metric-reviewed-images" class="metric-value">0</div>
+                </div>
+                <div class="metric-icon">✓</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-info">
+                    <h3>Progress</h3>
+                    <div id="metric-completion" class="metric-value">0%</div>
+                </div>
+                <div class="metric-icon">📊</div>
+            </div>
+        </section>
+
+        <!-- Dynamic Charts Area -->
+        <section id="charts" class="charts-grid">
+            <div class="loading-text">Loading statistics...</div>
+        </section>
+    </main>
+
+    <script src="/static/dashboard.js"></script>
+</body>
+
+</html>

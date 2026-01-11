@@ -54,7 +54,11 @@ const state = {
     // Comparison Mode
     comparisonMode: false,
     compareModelLeft: null, // modelKey
-    compareModelRight: null // modelKey
+    compareModelLeft: null, // modelKey
+    compareModelRight: null, // modelKey
+
+    // Time Tracking
+    startTime: 0
 };
 
 // DOM Elements
@@ -403,7 +407,10 @@ async function updateQAState(status, comment) {
                 model: selectedModel,
                 status: status,
                 comment: comment,
-                flags: JSON.stringify(Array.from(state.flaggedBoxes))
+                status: status,
+                comment: comment,
+                flags: JSON.stringify(Array.from(state.flaggedBoxes)),
+                duration: ((Date.now() - state.startTime) / 1000) // Send duration in seconds
             })
         });
 
@@ -646,6 +653,7 @@ function renderImageList() {
 function loadImage(filename) {
     if (!filename) return;
     state.currentImage = filename;
+    state.startTime = Date.now(); // Start timer
 
     // Reset hidden boxes on image change? Yes usually
     state.hiddenBoxes.clear();

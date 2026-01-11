@@ -24,7 +24,7 @@
             <div class="top-bar-group">
                 <!-- Zoom Icon -->
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor" stroke-width="2" style="color: var(--text-muted); margin-right: 8px;">
+                    stroke="currentColor" stroke-width="2" style="color: var(--text-muted); margin-right: 4px;">
                     <path stroke-linecap="round" stroke-linejoin="round"
                         d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
                 </svg>
@@ -64,15 +64,18 @@
 
                 <button id="btn-unhide-all" class="btn-primary"
                     style="margin-left: 15px; font-size: 0.8rem; padding: 2px 8px;">Unhide All</button>
+
+                <div id="mode-select" class="segmented-control" style="font-size: 0.8rem; margin-left: 15px;">
+                    <button class="segmented-btn active" data-value="normal">Normal</button>
+                    <button class="segmented-btn" data-value="compare">Compare</button>
+                </div>
             </div>
         </div>
 
         <!-- Right: Actions -->
         <div class="top-bar-right">
-            <div id="mode-select" class="segmented-control" style="font-size: 0.8rem; margin-right: 15px;">
-                <button class="segmented-btn active" data-value="normal">Normal</button>
-                <button class="segmented-btn" data-value="compare">Compare</button>
-            </div>
+            <button id="btn-dashboard" class="btn-primary" onclick="window.location.href='/dashboard'"
+                style="margin-right: 15px; font-size: 0.8rem; padding: 2px 8px;">Dashboard</button>
             <button id="btn-toggle-right" class="btn-icon" title="Toggle Controls">☰</button>
         </div>
     </header>

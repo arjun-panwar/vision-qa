@@ -311,6 +311,7 @@ class QARequest(BaseModel):
     status: str
     comment: str = ""
     flags: str = ""  # JSON string of flagged boxes
+    duration: float = 0.0  # Time spent reviewing in seconds
 
 def get_qa_file_path():
     if not state.root_dir:
@@ -339,13 +340,23 @@ async def save_qa_status(req: QARequest):
         # If req.model is missing (legacy frontend?), we might fallback to generic checks, 
         # but we updated frontend plan to send it.
         
-        prefix = req.model
+        # Determine column prefix: Use Model Name if available, else Key
+        # Sanitization: Replace spaces with underscores, keep it simple
+        model_info = state.models.get(req.model)
+        if model_info and "name" in model_info:
+             raw_name = model_info["name"]
+             safe_name = "".join([c if c.isalnum() else "_" for c in raw_name])
+             prefix = safe_name
+        else:
+             prefix = req.model
+
         col_status = f"{prefix}_status"
         col_comment = f"{prefix}_comment"
         col_flags = f"{prefix}_flags"
+        col_duration = f"{prefix}_duration"
 
         # Ensure columns exist
-        for col in [col_status, col_comment, col_flags]:
+        for col in [col_status, col_comment, col_flags, col_duration]:
             if col not in df.columns:
                 df[col] = "" # Initialize new column
 
@@ -359,6 +370,7 @@ async def save_qa_status(req: QARequest):
             df.loc[mask, col_status] = req.status
             df.loc[mask, col_comment] = req.comment
             df.loc[mask, col_flags] = req.flags
+            df.loc[mask, col_duration] = req.duration
             df.loc[mask, 'timestamp'] = timestamp
         else:
             # Append new row
@@ -367,14 +379,16 @@ async def save_qa_status(req: QARequest):
                 'timestamp': timestamp,
                 col_status: req.status,
                 col_comment: req.comment,
-                col_flags: req.flags
+                col_flags: req.flags,
+                col_duration: req.duration
             }
             new_row = pd.DataFrame([new_row_data])
             df = pd.concat([df, new_row], ignore_index=True)
             
         # Save back
         df.to_excel(qa_path, index=False)
-        return {"status": "success", "message": f"QA status saved for {req.model}"}
+        df.to_excel(qa_path, index=False)
+        return {"status": "success", "message": f"QA status saved for {req.model} ({prefix})"}
         
     except Exception as e:
         print(f"QA Save Error: {e}")
@@ -399,12 +413,15 @@ async def load_qa_status():
         
         result = {}
         
-        # Identify model columns
-        # They end with _status, _comment, _flags
-        # We can scan columns to find models
-        # Also support legacy 'status', 'comment', 'flags' as "legacy" or "general" model?
-        # Let's map them to a "default" key or keep them if they exist?
-        # The plan implies we transition to model-specific.
+        # Prepare reverse lookup: Name (safe) -> Key
+        # And Key -> Key (for legacy)
+        lookup = {}
+        for k, v in state.models.items():
+            lookup[k] = k # Support key match
+            if "name" in v:
+                raw_name = v["name"]
+                safe_name = "".join([c if c.isalnum() else "_" for c in raw_name])
+                lookup[safe_name] = k
         
         for _, row in df.iterrows():
             img = row['image']
@@ -413,13 +430,22 @@ async def load_qa_status():
             # 1. Parse dynamic columns
             for col in df.columns:
                 if col.endswith("_status"):
-                    model = col[:-7] # remove _status
+                    prefix = col[:-7] # remove _status
+                    
+                    # Resolve prefix to model key
+                    model_key = lookup.get(prefix)
+                    # If not found, maybe it's an old key or a renamed model? 
+                    # If we can't map it, we can't display it in valid UI context easily.
+                    # But maybe we pass it through as is?
+                    if not model_key:
+                        model_key = prefix
+
                     status = row[col]
-                    comment = row.get(f"{model}_comment", "")
-                    flags = row.get(f"{model}_flags", "")
+                    comment = row.get(f"{prefix}_comment", "")
+                    flags = row.get(f"{prefix}_flags", "")
                     
                     if status or comment or flags:
-                        result[img][model] = {
+                        result[img][model_key] = {
                             "status": str(status),
                             "comment": str(comment),
                             "flags": str(flags)
@@ -427,8 +453,6 @@ async def load_qa_status():
             
             # 2. Handle legacy columns if strictly present and not empty
             if 'status' in df.columns and row['status']:
-                # Save as "legacy" or mix in? 
-                # Let's put it under key "default" or "legacy"
                  result[img]["legacy"] = {
                     "status": str(row['status']),
                     "comment": str(row.get('comment', "")),
@@ -440,3 +464,131 @@ async def load_qa_status():
         print(f"QA Load Error: {e}")
         return {}
 
+@app.get("/api/qa/stats")
+async def get_qa_stats():
+    # 1. Total Images
+    total_images = 0
+    if state.images_dir and os.path.exists(state.images_dir):
+        # reuse list logic or just glob count
+        extensions = ['*.jpg', '*.jpeg', '*.png', '*.bmp', '*.JPG', '*.JPEG', '*.PNG']
+        images = []
+        for ext in extensions:
+            images.extend(glob.glob(os.path.join(state.images_dir, ext)))
+        total_images = len(set([os.path.basename(img) for img in images]))
+
+    # 2. QA Stats
+    qa_path = get_qa_file_path()
+    
+    stats = {
+        "total_images": total_images,
+        "reviewed_images": 0,
+        "models": {} 
+    }
+    
+    if not qa_path or not os.path.exists(qa_path):
+        return stats
+
+    try:
+        df = pd.read_excel(qa_path)
+        stats["reviewed_images"] = len(df)
+        
+        # Determine models from columns AND configuration
+        # Pattern: {model}_status
+        
+        # 1. Start with configured models
+        final_models = set(state.models.keys())
+        
+        # Helper: Resolve prefix to key
+        def resolve_model_key(prefix):
+            if prefix in state.models: return prefix
+            for k, v in state.models.items():
+                # Check raw name
+                if v.get("name") == prefix: return k
+                # Check safe name
+                safe = "".join([c if c.isalnum() else "_" for c in v.get("name", "")])
+                if safe == prefix: return k
+            return None
+
+        # 2. Add any ORPHANED models found in Excel (legacy)
+        for col in df.columns:
+            if col.endswith("_status"):
+                 prefix = col[:-7]
+                 mapped_key = resolve_model_key(prefix)
+                 if mapped_key:
+                     # It maps to a known model, which is already in final_models
+                     pass
+                 else:
+                     # It's a legacy or unknown model, add it as a key
+                     final_models.add(prefix)
+        
+        for model_key in sorted(list(final_models)):
+             # We need to find the column used for this model.
+             # It could be the Key, or the Safe Name.
+             # We check both logic.
+             
+            model_info = state.models.get(model_key, {})
+            model_name_human = model_info.get("name", model_key)
+            
+            # Generate potential prefixes
+            possible_prefixes = [model_key]
+            if "name" in model_info:
+                safe_name = "".join([c if c.isalnum() else "_" for c in model_info["name"]])
+                possible_prefixes.insert(0, safe_name) # Prefer name
+            
+            # Find which prefix is in df
+            found_prefix = None
+            for p in possible_prefixes:
+                if f"{p}_status" in df.columns:
+                    found_prefix = p
+                    break
+            
+            # If not found, use the preferred one (safe_name) for zeroing out?
+            # Actually if not found, it means count is 0.
+            
+            col_status = f"{found_prefix}_status" if found_prefix else None
+            col_duration = f"{found_prefix}_duration" if found_prefix else None
+            
+            # Status Counts
+            status_counts = {"correct": 0, "incorrect": 0, "doubtful": 0}
+            
+            if col_status and col_status in df.columns:
+                 counts = df[col_status].value_counts().to_dict()
+                 # Merge safely
+                 for k, v in counts.items():
+                     k_str = str(k).lower() # ensure keys are normalized
+                     if k_str in status_counts:
+                         status_counts[k_str] = int(v)
+            
+            # Duration Stats
+            avg_duration = 0
+            if col_duration and col_duration in df.columns:
+                 # Convert to numeric, errors='coerce' turns non-numbers to NaN
+                durations = pd.to_numeric(df[col_duration], errors='coerce')
+                avg_duration = durations.mean()
+                if pd.isna(avg_duration):
+                    avg_duration = 0
+            
+            # Additional Details
+            raw_config = state.config.get(model_key, {})
+            details = {
+                "Version": raw_config.get("version", "N/A"),
+                "Weights": raw_config.get("weights_file", "N/A")
+            }
+
+            # Use model_key as key for frontend to match config, but send name for display
+            stats["models"][model_key] = {
+                "name": model_name_human,
+                "counts": status_counts,
+                "avg_duration": round(avg_duration, 2),
+                "details": details
+            }
+            
+    except Exception as e:
+        print(f"Stats Error: {e}")
+        
+    return stats
+
+
+@app.get("/dashboard")
+async def dashboard_page():
+    return FileResponse("static/dashboard.html")
