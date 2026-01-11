@@ -421,6 +421,7 @@ function updateQAUI(refreshSelect = true) {
                 }
 
                 updateQAUI(false); // Update UI for this model
+                renderImageList(); // Update sidebar status for this model
             };
 
             els.qaModelSelect.appendChild(btn);
@@ -517,6 +518,7 @@ function renderImageList() {
     els.imageList.innerHTML = '';
 
     const filter = state.filterQA;
+    const selectedModel = getSelectedQAModel(); // Get current model context
 
     // -- Calculate Counts --
     const counts = {
@@ -534,23 +536,17 @@ function renderImageList() {
             return;
         }
 
-        // Aggregate status or just check if ANY model has status?
-        // Let's say if filter is specific, we check specific?
-        // Or we just check if ANY model is marked.
-        // For simple summary, let's look at the FIRST available model or "any" logic.
-        // Better: Check if ALL models match? Or just ANY?
-        // Let's use a heuristic: if any model is 'incorrect', image is 'incorrect'.
-        // If all are 'correct', it's 'correct'.
-        // If mixed, maybe 'doubtful' or 'incorrect'.
-
         let status = 'unreviewed';
-        const statuses = Object.values(data).map(d => d.status).filter(s => s);
 
-        if (statuses.length === 0) status = 'unreviewed';
-        else if (statuses.includes('incorrect')) status = 'incorrect';
-        else if (statuses.includes('doubtful')) status = 'doubtful';
-        else if (statuses.every(s => s === 'correct')) status = 'correct';
-        else status = 'unreviewed'; // Should not happen if length > 0
+        // Use status specific to the SELECTED model
+        if (selectedModel && data[selectedModel]) {
+            status = data[selectedModel].status || 'unreviewed';
+        } else if (!selectedModel) {
+            // Fallback if no model selected (unlikely in normal flow but possible during init)
+            // Check if ANY model has status? Or just default to unreviewed?
+            // Let's stick to unreviewed to avoid confusion compared to specific model view.
+            status = 'unreviewed';
+        }
 
         if (status === 'unreviewed') counts.unreviewed++;
         else if (counts.hasOwnProperty(status)) counts[status]++;
@@ -570,15 +566,10 @@ function renderImageList() {
 
     state.images.forEach(imgName => {
         const data = state.qaData[imgName];
-
-        // Derive aggregate status
         let status = 'unreviewed';
-        if (data) {
-            const statuses = Object.values(data).map(d => d.status).filter(s => s);
-            if (statuses.length === 0) status = 'unreviewed';
-            else if (statuses.includes('incorrect')) status = 'incorrect';
-            else if (statuses.includes('doubtful')) status = 'doubtful';
-            else if (statuses.every(s => s === 'correct')) status = 'correct';
+
+        if (data && selectedModel && data[selectedModel]) {
+            status = data[selectedModel].status || 'unreviewed';
         }
 
         // Filter Logic
