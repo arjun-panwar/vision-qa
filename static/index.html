@@ -159,6 +159,10 @@
 
         <!-- Center: QA Controls + Comment -->
         <div class="footer-center" style="display: flex; align-items: center; gap: 1rem; justify-self: center;">
+            <select id="qa-model-select" title="Select Model to Grade"
+                style="padding: 4px; border-radius: 4px; border: 1px solid #ccc; max-width: 150px; font-weight: bold;">
+                <!-- Populated by JS -->
+            </select>
             <div class="qa-controls">
                 <button class="qa-btn correct" onclick="setQAStatus('correct')">Correct</button>
                 <button class="qa-btn incorrect" onclick="setQAStatus('incorrect')">Incorrect</button>

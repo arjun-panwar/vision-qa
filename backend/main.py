@@ -307,9 +307,10 @@ from datetime import datetime
 
 class QARequest(BaseModel):
     image: str
+    model: str  # New field: which model is being graded
     status: str
     comment: str = ""
-    flags: str = ""  # New field for storing flagged boxes (JSON string)
+    flags: str = ""  # JSON string of flagged boxes
 
 def get_qa_file_path():
     if not state.root_dir:
@@ -326,13 +327,27 @@ async def save_qa_status(req: QARequest):
         # Load existing or create new
         if os.path.exists(qa_path):
             df = pd.read_excel(qa_path)
-            # Ensure columns exist
             if 'image' not in df.columns:
-                df = pd.DataFrame(columns=['image', 'status', 'comment', 'flags', 'timestamp'])
-            if 'flags' not in df.columns:
-                df['flags'] = ""
+                df = pd.DataFrame(columns=['image', 'timestamp'])
         else:
-            df = pd.DataFrame(columns=['image', 'status', 'comment', 'flags', 'timestamp'])
+            df = pd.DataFrame(columns=['image', 'timestamp'])
+
+        # Define columns for this model
+        # Logic: {model}_status, {model}_comment, {model}_flags
+        # If req.model is empty or specific "general" case, we could stick to old cols, 
+        # but the plan is to be model-specific.
+        # If req.model is missing (legacy frontend?), we might fallback to generic checks, 
+        # but we updated frontend plan to send it.
+        
+        prefix = req.model
+        col_status = f"{prefix}_status"
+        col_comment = f"{prefix}_comment"
+        col_flags = f"{prefix}_flags"
+
+        # Ensure columns exist
+        for col in [col_status, col_comment, col_flags]:
+            if col not in df.columns:
+                df[col] = "" # Initialize new column
 
         # Check if row exists
         mask = df['image'] == req.image
@@ -340,25 +355,26 @@ async def save_qa_status(req: QARequest):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         if mask.any():
-            # Update existing
-            df.loc[mask, 'status'] = req.status
-            df.loc[mask, 'comment'] = req.comment
-            df.loc[mask, 'flags'] = req.flags
+            # Update existing row
+            df.loc[mask, col_status] = req.status
+            df.loc[mask, col_comment] = req.comment
+            df.loc[mask, col_flags] = req.flags
             df.loc[mask, 'timestamp'] = timestamp
         else:
-            # Append new
-            new_row = pd.DataFrame([{
+            # Append new row
+            new_row_data = {
                 'image': req.image,
-                'status': req.status,
-                'comment': req.comment,
-                'flags': req.flags,
-                'timestamp': timestamp
-            }])
+                'timestamp': timestamp,
+                col_status: req.status,
+                col_comment: req.comment,
+                col_flags: req.flags
+            }
+            new_row = pd.DataFrame([new_row_data])
             df = pd.concat([df, new_row], ignore_index=True)
             
         # Save back
         df.to_excel(qa_path, index=False)
-        return {"status": "success", "message": "QA status saved"}
+        return {"status": "success", "message": f"QA status saved for {req.model}"}
         
     except Exception as e:
         print(f"QA Save Error: {e}")
@@ -371,21 +387,54 @@ async def load_qa_status():
         return {}
         
     try:
-        df = pd.read_excel(qa_path)
-        # Ensure status is string and handle NaN
-        if 'status' in df.columns:
-            df['status'] = df['status'].fillna('').astype(str)
-        if 'flags' in df.columns:
-            df['flags'] = df['flags'].fillna('').astype(str)
-            
-        # Convert to dict: { image: { status, comment, flags } }
+        df = pd.read_excel(qa_path).fillna('')
+        
+        # Result format:
+        # { 
+        #   "image_name": {
+        #       "model_name": { "status": "...", "comment": "...", "flags": "..." },
+        #       ...
+        #   }
+        # }
+        
         result = {}
+        
+        # Identify model columns
+        # They end with _status, _comment, _flags
+        # We can scan columns to find models
+        # Also support legacy 'status', 'comment', 'flags' as "legacy" or "general" model?
+        # Let's map them to a "default" key or keep them if they exist?
+        # The plan implies we transition to model-specific.
+        
         for _, row in df.iterrows():
-            result[row['image']] = {
-                "status": row['status'],
-                "comment": row['comment'] if pd.notna(row['comment']) else "",
-                "flags": row['flags'] if 'flags' in df.columns and pd.notna(row['flags']) else ""
-            }
+            img = row['image']
+            result[img] = {}
+            
+            # 1. Parse dynamic columns
+            for col in df.columns:
+                if col.endswith("_status"):
+                    model = col[:-7] # remove _status
+                    status = row[col]
+                    comment = row.get(f"{model}_comment", "")
+                    flags = row.get(f"{model}_flags", "")
+                    
+                    if status or comment or flags:
+                        result[img][model] = {
+                            "status": str(status),
+                            "comment": str(comment),
+                            "flags": str(flags)
+                        }
+            
+            # 2. Handle legacy columns if strictly present and not empty
+            if 'status' in df.columns and row['status']:
+                # Save as "legacy" or mix in? 
+                # Let's put it under key "default" or "legacy"
+                 result[img]["legacy"] = {
+                    "status": str(row['status']),
+                    "comment": str(row.get('comment', "")),
+                    "flags": str(row.get('flags', ""))
+                }
+                
         return result
     except Exception as e:
         print(f"QA Load Error: {e}")

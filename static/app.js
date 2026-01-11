@@ -98,6 +98,7 @@ const els = {
     qaIncorrect: document.querySelector('.qa-btn.incorrect'),
     qaDoubtful: document.querySelector('.qa-btn.doubtful'),
     qaComment: document.getElementById('qa-comment'),
+    qaModelSelect: document.getElementById('qa-model-select'),
     qaSavedStatus: document.getElementById('qa-saved-status'),
     btnFlagMode: document.getElementById('btn-flag-mode'),
     filterQA: document.getElementById('filter-qa'),
@@ -300,20 +301,43 @@ async function setQAStatus(status) {
     // Let's allow switching. To clear, maybe we need a clear button? 
     // For now, simple switch.
 
+    if (els.qaModelSelect) {
+        els.qaModelSelect.onchange = () => {
+            updateQAUI(false); // Update UI based on new selection (don't re-render list)
+        };
+    }
+}
+
+async function setQAStatus(status) {
+    if (!state.currentImage) return;
     updateQAState(status, els.qaComment.value);
 }
 
 async function updateQAState(status, comment) {
     if (!state.currentImage) return;
 
+    const selectedModel = els.qaModelSelect ? els.qaModelSelect.value : null;
+    if (!selectedModel) {
+        console.warn("No model selected for QA");
+        return;
+    }
+
+    // Initialize structure if missing
+    if (!state.qaData[state.currentImage]) state.qaData[state.currentImage] = {};
+
+    // Note: backend expects structure { image: { modelA: {...}, modelB: {...} } }
+    // BUT load_qa_status returns exactly that.
+    // So state.qaData[img] is the object containing models.
+
     // Optimistic Update
-    state.qaData[state.currentImage] = {
+    state.qaData[state.currentImage][selectedModel] = {
         status,
         comment,
         flags: JSON.stringify(Array.from(state.flaggedBoxes))
     };
-    updateQAUI();
-    renderImageList(); // Update sidebar icon/color
+
+    updateQAUI(false); // Update buttons
+    renderImageList(); // Update sidebar icon/color (aggregate or specific?)
 
     els.qaSavedStatus.textContent = "Saving...";
 
@@ -323,6 +347,7 @@ async function updateQAState(status, comment) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 image: state.currentImage,
+                model: selectedModel,
                 status: status,
                 comment: comment,
                 flags: JSON.stringify(Array.from(state.flaggedBoxes))
@@ -341,8 +366,10 @@ async function updateQAState(status, comment) {
     }
 }
 
-function updateQAUI() {
+function updateQAUI(refreshSelect = true) {
     if (!state.currentImage) {
+        // Reset inputs
+        if (els.qaModelSelect) els.qaModelSelect.innerHTML = "";
         els.qaCorrect.classList.remove('active');
         els.qaIncorrect.classList.remove('active');
         els.qaDoubtful.classList.remove('active');
@@ -353,19 +380,51 @@ function updateQAUI() {
         state.flaggedBoxes.clear();
         return;
     }
-    const data = state.qaData[state.currentImage] || { status: null, comment: "" };
 
-    els.qaCorrect.classList.toggle('active', data.status === 'correct');
-    els.qaIncorrect.classList.toggle('active', data.status === 'incorrect');
-    els.qaDoubtful.classList.toggle('active', data.status === 'doubtful');
+    const modelKeys = Object.keys(state.modelsConfig).sort();
 
-    els.qaComment.value = data.comment || "";
+    // Populate Select if needed
+    if (els.qaModelSelect && (refreshSelect || els.qaModelSelect.options.length === 0)) {
+        const currentVal = els.qaModelSelect.value;
+        const desiredVal = currentVal || modelKeys[0]; // Keep current or default to first
+
+        els.qaModelSelect.innerHTML = '';
+        modelKeys.forEach(key => {
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = state.modelsConfig[key].name || key;
+            els.qaModelSelect.appendChild(opt);
+        });
+
+        // Try to restore value
+        if (desiredVal && modelKeys.includes(desiredVal)) {
+            els.qaModelSelect.value = desiredVal;
+        } else if (modelKeys.length > 0) {
+            els.qaModelSelect.value = modelKeys[0];
+        }
+    }
+
+    const selectedModel = els.qaModelSelect ? els.qaModelSelect.value : null;
+    const imgData = state.qaData[state.currentImage] || {};
+    // Ensure we handle the nested structure correctly.
+    // imgData might have keys like "modelA", "modelB" OR "status" if legacy.
+    // If we have legacy data mixed in, we might check it.
+
+    const modelData = (selectedModel && imgData[selectedModel]) ? imgData[selectedModel] : {};
+
+    // Legacy fallback? If we want to show generic status for a specific model? No.
+
+    els.qaCorrect.classList.toggle('active', modelData.status === 'correct');
+    els.qaIncorrect.classList.toggle('active', modelData.status === 'incorrect');
+    els.qaDoubtful.classList.toggle('active', modelData.status === 'doubtful');
+
+    els.qaComment.value = modelData.comment || "";
 
     // Load Flags
     state.flaggedBoxes.clear();
     try {
-        if (data.flags) {
-            const flags = JSON.parse(data.flags);
+        if (modelData.flags) {
+            const flags = JSON.parse(modelData.flags);
             flags.forEach(f => state.flaggedBoxes.add(f));
         }
     } catch (e) {
@@ -438,9 +497,31 @@ function renderImageList() {
     };
 
     state.images.forEach(imgName => {
-        const qa = state.qaData[imgName];
-        const status = qa ? qa.status : 'unreviewed';
-        if (!status || status === 'unreviewed') counts.unreviewed++;
+        const data = state.qaData[imgName];
+        if (!data) {
+            counts.unreviewed++;
+            return;
+        }
+
+        // Aggregate status or just check if ANY model has status?
+        // Let's say if filter is specific, we check specific?
+        // Or we just check if ANY model is marked.
+        // For simple summary, let's look at the FIRST available model or "any" logic.
+        // Better: Check if ALL models match? Or just ANY?
+        // Let's use a heuristic: if any model is 'incorrect', image is 'incorrect'.
+        // If all are 'correct', it's 'correct'.
+        // If mixed, maybe 'doubtful' or 'incorrect'.
+
+        let status = 'unreviewed';
+        const statuses = Object.values(data).map(d => d.status).filter(s => s);
+
+        if (statuses.length === 0) status = 'unreviewed';
+        else if (statuses.includes('incorrect')) status = 'incorrect';
+        else if (statuses.includes('doubtful')) status = 'doubtful';
+        else if (statuses.every(s => s === 'correct')) status = 'correct';
+        else status = 'unreviewed'; // Should not happen if length > 0
+
+        if (status === 'unreviewed') counts.unreviewed++;
         else if (counts.hasOwnProperty(status)) counts[status]++;
     });
 
@@ -457,8 +538,17 @@ function renderImageList() {
     }
 
     state.images.forEach(imgName => {
-        const qa = state.qaData[imgName];
-        const status = qa ? qa.status : 'unreviewed';
+        const data = state.qaData[imgName];
+
+        // Derive aggregate status
+        let status = 'unreviewed';
+        if (data) {
+            const statuses = Object.values(data).map(d => d.status).filter(s => s);
+            if (statuses.length === 0) status = 'unreviewed';
+            else if (statuses.includes('incorrect')) status = 'incorrect';
+            else if (statuses.includes('doubtful')) status = 'doubtful';
+            else if (statuses.every(s => s === 'correct')) status = 'correct';
+        }
 
         // Filter Logic
         if (filter !== 'all') {
@@ -676,6 +766,12 @@ function renderModelToggles() {
                 keys.forEach(k => {
                     state.visibleModels[k] = (k === key);
                 });
+
+                // Sync QA selector to this model
+                if (els.qaModelSelect) {
+                    els.qaModelSelect.value = key;
+                    updateQAUI(false); // Refresh UI for this model
+                }
             }
             renderModelToggles();
             draw();
