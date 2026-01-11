@@ -444,6 +444,14 @@ input[type=range] {
     color: white;
 }
 
+.view-label-select.active-qa-model {
+    background-color: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    font-weight: bold;
+    box-shadow: 0 0 10px rgba(74, 144, 226, 0.6);
+}
+
 /* Image Name Display Feedback */
 .copy-feedback {
     animation: flash-green 0.5s ease;
@@ -491,7 +499,9 @@ input[type=range] {
     background-color: var(--accent);
     color: white;
     border-color: var(--accent);
-}/* Model Selector Buttons */
+}
+
+/* Model Selector Buttons */
 .model-selector-item {
     position: relative;
     display: flex;
@@ -612,6 +622,7 @@ input[type=range] {
     color: white;
     text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 }
+
 /* Segmented Control */
 .segmented-control {
     display: inline-flex;
@@ -646,6 +657,7 @@ input[type=range] {
 }
 
 .segmented-btn.active {
-    background-color: var(--accent); /* Bright blue */
+    background-color: var(--accent);
+    /* Bright blue */
     color: white;
 }

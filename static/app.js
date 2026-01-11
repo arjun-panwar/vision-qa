@@ -459,6 +459,8 @@ function updateQAUI(refreshSelect = true) {
     } catch (e) {
         console.error("Failed to parse flags:", e);
     }
+
+    highlightMatchingDropdowns();
     draw();
 }
 
@@ -609,9 +611,7 @@ function loadImage(filename) {
 
     renderImageList(); // Update active class
     updateQAUI(); // Update footer
-
-    renderImageList(); // Update active class
-    updateQAUI(); // Update footer
+    highlightMatchingDropdowns();
 
     // Set src for BOTH images
     const src = `/api/images/${filename}`;
@@ -936,6 +936,8 @@ function setMode(mode) {
         resizeCanvas();
         fitImageToScreen();
     }, 50);
+
+    highlightMatchingDropdowns();
 }
 
 function populateModelSelects() {
@@ -973,11 +975,13 @@ function populateModelSelects() {
         state.compareModelLeft = e.target.value;
         updateModelSelectRules();
         draw();
+        highlightMatchingDropdowns();
     };
     els.selectModelRight.onchange = (e) => {
         state.compareModelRight = e.target.value;
         updateModelSelectRules();
         draw();
+        highlightMatchingDropdowns();
     };
 
     updateModelSelectRules();
@@ -1004,6 +1008,26 @@ function updateModelSelectRules() {
             opt.disabled = false;
         }
     });
+}
+
+function highlightMatchingDropdowns() {
+    const selectedQAModel = getSelectedQAModel();
+
+    if (els.selectModelLeft) {
+        if (selectedQAModel && els.selectModelLeft.value === selectedQAModel) {
+            els.selectModelLeft.classList.add('active-qa-model');
+        } else {
+            els.selectModelLeft.classList.remove('active-qa-model');
+        }
+    }
+
+    if (els.selectModelRight) {
+        if (selectedQAModel && els.selectModelRight.value === selectedQAModel) {
+            els.selectModelRight.classList.add('active-qa-model');
+        } else {
+            els.selectModelRight.classList.remove('active-qa-model');
+        }
+    }
 }
 
 
