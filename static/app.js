@@ -60,6 +60,9 @@ const state = {
     compareModelLeft: null, // modelKey
     compareModelRight: null, // modelKey
 
+    // Search
+    searchQuery: '',
+
     // Time Tracking
     startTime: 0
 };
@@ -129,7 +132,10 @@ const els = {
     boxCommentInput: document.getElementById('box-comment-input'),
     btnSaveComment: document.getElementById('btn-save-comment'),
     btnDeleteComment: document.getElementById('btn-delete-comment'),
-    btnCancelComment: document.getElementById('btn-cancel-comment')
+    btnCancelComment: document.getElementById('btn-cancel-comment'),
+
+    // Search
+    imageSearchInput: document.getElementById('image-search-input')
 };
 
 // Two contexts
@@ -678,6 +684,11 @@ function renderImageList() {
         if (filter !== 'all') {
             if (filter === 'unreviewed' && status !== 'unreviewed') return;
             if (filter !== 'unreviewed' && status !== filter) return;
+        }
+
+        // Search Logic
+        if (state.searchQuery) {
+            if (!imgName.toLowerCase().includes(state.searchQuery.toLowerCase())) return;
         }
 
         const li = document.createElement('li');
@@ -1946,6 +1957,13 @@ function setupEventListeners() {
             state.filterQA = e.target.value;
             renderImageList();
         };
+    }
+
+    if (els.imageSearchInput) {
+        els.imageSearchInput.addEventListener('input', (e) => {
+            state.searchQuery = e.target.value;
+            renderImageList();
+        });
     }
 
     if (els.btnPrev) {
