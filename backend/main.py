@@ -311,6 +311,7 @@ class QARequest(BaseModel):
     status: str
     comment: str = ""
     flags: str = ""  # JSON string of flagged boxes
+    box_comments: str = "" # JSON string of box comments: {box_id: comment}
     duration: float = 0.0  # Time spent reviewing in seconds
 
 def get_qa_file_path():
@@ -333,15 +334,7 @@ async def save_qa_status(req: QARequest):
         else:
             df = pd.DataFrame(columns=['image', 'timestamp'])
 
-        # Define columns for this model
-        # Logic: {model}_status, {model}_comment, {model}_flags
-        # If req.model is empty or specific "general" case, we could stick to old cols, 
-        # but the plan is to be model-specific.
-        # If req.model is missing (legacy frontend?), we might fallback to generic checks, 
-        # but we updated frontend plan to send it.
-        
         # Determine column prefix: Use Model Name if available, else Key
-        # Sanitization: Replace spaces with underscores, keep it simple
         model_info = state.models.get(req.model)
         if model_info and "name" in model_info:
              raw_name = model_info["name"]
@@ -353,10 +346,11 @@ async def save_qa_status(req: QARequest):
         col_status = f"{prefix}_status"
         col_comment = f"{prefix}_comment"
         col_flags = f"{prefix}_flags"
+        col_box_comments = f"{prefix}_box_comments"
         col_duration = f"{prefix}_duration"
 
         # Ensure columns exist
-        for col in [col_status, col_comment, col_flags, col_duration]:
+        for col in [col_status, col_comment, col_flags, col_box_comments, col_duration]:
             if col not in df.columns:
                 df[col] = "" # Initialize new column
 
@@ -370,6 +364,7 @@ async def save_qa_status(req: QARequest):
             df.loc[mask, col_status] = req.status
             df.loc[mask, col_comment] = req.comment
             df.loc[mask, col_flags] = req.flags
+            df.loc[mask, col_box_comments] = req.box_comments
             df.loc[mask, col_duration] = req.duration
             df.loc[mask, 'timestamp'] = timestamp
         else:
@@ -380,13 +375,13 @@ async def save_qa_status(req: QARequest):
                 col_status: req.status,
                 col_comment: req.comment,
                 col_flags: req.flags,
+                col_box_comments: req.box_comments,
                 col_duration: req.duration
             }
             new_row = pd.DataFrame([new_row_data])
             df = pd.concat([df, new_row], ignore_index=True)
             
         # Save back
-        df.to_excel(qa_path, index=False)
         df.to_excel(qa_path, index=False)
         return {"status": "success", "message": f"QA status saved for {req.model} ({prefix})"}
         
@@ -403,18 +398,9 @@ async def load_qa_status():
     try:
         df = pd.read_excel(qa_path).fillna('')
         
-        # Result format:
-        # { 
-        #   "image_name": {
-        #       "model_name": { "status": "...", "comment": "...", "flags": "..." },
-        #       ...
-        #   }
-        # }
-        
         result = {}
         
         # Prepare reverse lookup: Name (safe) -> Key
-        # And Key -> Key (for legacy)
         lookup = {}
         for k, v in state.models.items():
             lookup[k] = k # Support key match
@@ -434,21 +420,20 @@ async def load_qa_status():
                     
                     # Resolve prefix to model key
                     model_key = lookup.get(prefix)
-                    # If not found, maybe it's an old key or a renamed model? 
-                    # If we can't map it, we can't display it in valid UI context easily.
-                    # But maybe we pass it through as is?
                     if not model_key:
                         model_key = prefix
 
                     status = row[col]
                     comment = row.get(f"{prefix}_comment", "")
                     flags = row.get(f"{prefix}_flags", "")
+                    box_comments = row.get(f"{prefix}_box_comments", "")
                     
-                    if status or comment or flags:
+                    if status or comment or flags or box_comments:
                         result[img][model_key] = {
                             "status": str(status),
                             "comment": str(comment),
-                            "flags": str(flags)
+                            "flags": str(flags),
+                            "box_comments": str(box_comments)
                         }
             
             # 2. Handle legacy columns if strictly present and not empty
@@ -456,7 +441,8 @@ async def load_qa_status():
                  result[img]["legacy"] = {
                     "status": str(row['status']),
                     "comment": str(row.get('comment', "")),
-                    "flags": str(row.get('flags', ""))
+                    "flags": str(row.get('flags', "")),
+                    "box_comments": ""
                 }
                 
         return result

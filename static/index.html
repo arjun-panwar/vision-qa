@@ -157,6 +157,15 @@
                     <!-- Dynamic checkboxes and color pickers -->
                 </div>
             </div>
+
+            <div class="control-group comments-control-group">
+                <h3>Box Comments</h3>
+                <div id="comments-section-sidebar" style="display: flex; flex-direction: column; gap: 8px;">
+                    <!-- Populated by JS -->
+                    <div style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">No specific box
+                        comments.</div>
+                </div>
+            </div>
         </aside>
     </div>
     <!-- QA Footer -->
@@ -203,7 +212,16 @@
         </div>
     </footer>
 
-    <script src="/static/app.js?v=20"></script>
+    <!-- Comment Popup -->
+    <div id="comment-popup" class="comment-popup" style="display: none;">
+        <textarea id="box-comment-input" placeholder="Enter comment for this box..."></textarea>
+        <div class="popup-actions">
+            <button id="btn-save-comment" class="btn-primary">Save</button>
+            <button id="btn-cancel-comment" class="qa-btn">Cancel</button>
+        </div>
+    </div>
+
+    <script src="/static/app.js?v=21"></script>
 </body>
 
 </html>

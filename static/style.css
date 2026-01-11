@@ -282,7 +282,12 @@ body {
     background-color: var(--bg-panel);
     border-left: 1px solid var(--border);
     padding: 1rem;
-    overflow-y: auto;
+    /* overflow-y: auto; <-- Removed */
+    overflow: hidden;
+    /* Flex container now */
+    display: flex;
+    flex-direction: column;
+    height: 100%;
     transition: width 0.3s ease, padding 0.3s ease, border 0.3s ease;
 }
 
@@ -296,18 +301,48 @@ body {
     margin-bottom: 1rem;
     font-size: 1.2rem;
     color: var(--accent);
+    flex-shrink: 0;
 }
 
 .control-group {
     margin-bottom: 2rem;
     padding-bottom: 1rem;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    /* Default: don't shrink, size to content */
+}
+
+/* Make the comments group fill remaining space */
+.comments-control-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    /* Prevent spill */
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
 }
 
 .control-group h3 {
     font-size: 1rem;
     margin-bottom: 0.8rem;
     color: var(--text-muted);
+}
+
+/* Sidebar Comment List */
+#comments-section-sidebar {
+    /* max-height: 300px; <-- Removed fixed height */
+    flex: 1;
+    /* Fill remaining space in parent */
+    overflow-y: auto;
+    padding-right: 4px;
+    /* Space for scrollbar */
+    border: 1px solid var(--border);
+    /* Optional: distinct area */
+    border-radius: 4px;
+    padding: 8px;
+    background-color: rgba(0, 0, 0, 0.2);
 }
 
 .checkbox-label {
@@ -694,4 +729,100 @@ input[type=range] {
     background-color: var(--accent);
     /* Bright blue */
     color: white;
+}
+
+/* Comment Popup */
+.comment-popup {
+    position: absolute;
+    z-index: 1000;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 10px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    min-width: 250px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.comment-popup textarea {
+    width: 100%;
+    min-height: 80px;
+    background: #333;
+    border: 1px solid var(--border);
+    color: #fff;
+    padding: 8px;
+    border-radius: 4px;
+    resize: vertical;
+    outline: none;
+    font-family: inherit;
+}
+
+.comment-popup .popup-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* Sidebar Comment List */
+#comments-section-sidebar {
+    flex: 1;
+    /* Fill remaining space in parent */
+    overflow-y: auto;
+    padding-right: 4px;
+    /* Space for scrollbar */
+    border: 1px solid var(--border);
+    /* Optional: distinct area */
+    border-radius: 4px;
+    padding: 8px;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Custom Scrollbar for comments */
+#comments-section-sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+#comments-section-sidebar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#comments-section-sidebar::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 3px;
+}
+
+.sidebar-comment-item {
+    background-color: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.85rem;
+}
+
+.sidebar-comment-item:hover {
+    border-color: var(--accent);
+    background-color: #383838;
+}
+
+.sidebar-comment-item.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 5px rgba(74, 144, 226, 0.5);
+    background-color: #3a4b5e;
+}
+
+.comment-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.comment-text {
+    word-break: break-word;
+    color: var(--text-main);
 }

@@ -14,7 +14,10 @@ const state = {
     labelsConfig: {},
 
     // QA Data: { filename: { status: 'correct'|'incorrect'|'doubtful', comment: '...' } }
+    // QA Data: { filename: { status: 'correct'|'incorrect'|'doubtful', comment: '...' } }
     qaData: {},
+    boxComments: {}, // Map<boxId, string> for CURRENT image
+    highlightedCommentBox: null, // boxId of currently highlighted comment
     filterQA: 'all', // all, unreviewed, correct, incorrect, doubtful
 
     // UI selections
@@ -104,6 +107,7 @@ const els = {
     qaSavedStatus: document.getElementById('qa-saved-status'),
     btnFlagMode: document.getElementById('btn-flag-mode'),
     filterQA: document.getElementById('filter-qa'),
+    commentsSection: document.getElementById('comments-section-sidebar'),
     btnPrev: document.getElementById('btn-prev'),
     btnPrev: document.getElementById('btn-prev'),
     btnNext: document.getElementById('btn-next'),
@@ -118,7 +122,13 @@ const els = {
     sliderOpacity: document.getElementById('slider-opacity'),
     valOpacity: document.getElementById('val-opacity'),
     checkLabels: document.getElementById('check-labels'),
-    checkScores: document.getElementById('check-scores')
+    checkScores: document.getElementById('check-scores'),
+
+    // Comment Popup
+    commentPopup: document.getElementById('comment-popup'),
+    boxCommentInput: document.getElementById('box-comment-input'),
+    btnSaveComment: document.getElementById('btn-save-comment'),
+    btnCancelComment: document.getElementById('btn-cancel-comment')
 };
 
 // Two contexts
@@ -341,10 +351,32 @@ async function fetchQAStatus() {
         if (res.ok) {
             state.qaData = await res.json();
             renderImageList();
+            if (state.currentImage) {
+                loadBoxCommentsForCurrentImage();
+                renderBoxCommentsSidebar();
+                draw();
+            }
         }
     } catch (err) {
         console.error("Failed to load QA status:", err);
     }
+}
+
+function loadBoxCommentsForCurrentImage() {
+    state.boxComments = {};
+    if (!state.currentImage || !state.qaData[state.currentImage]) return;
+
+    const imgData = state.qaData[state.currentImage];
+    Object.keys(imgData).forEach(modelKey => {
+        if (imgData[modelKey].box_comments) {
+            try {
+                const comments = JSON.parse(imgData[modelKey].box_comments);
+                Object.assign(state.boxComments, comments);
+            } catch (e) {
+                console.error("Error parsing box comments:", e);
+            }
+        }
+    });
 }
 
 async function setQAStatus(status) {
@@ -390,7 +422,8 @@ async function updateQAState(status, comment) {
     state.qaData[state.currentImage][selectedModel] = {
         status,
         comment,
-        flags: JSON.stringify(Array.from(state.flaggedBoxes))
+        flags: JSON.stringify(Array.from(state.flaggedBoxes)),
+        box_comments: JSON.stringify(filterBoxCommentsForModel(selectedModel))
     };
 
     updateQAUI(false); // Update buttons
@@ -407,9 +440,8 @@ async function updateQAState(status, comment) {
                 model: selectedModel,
                 status: status,
                 comment: comment,
-                status: status,
-                comment: comment,
                 flags: JSON.stringify(Array.from(state.flaggedBoxes)),
+                box_comments: JSON.stringify(filterBoxCommentsForModel(selectedModel)),
                 duration: ((Date.now() - state.startTime) / 1000) // Send duration in seconds
             })
         });
@@ -424,6 +456,17 @@ async function updateQAState(status, comment) {
         console.error("QA Save Failed:", err);
         els.qaSavedStatus.textContent = "Error!";
     }
+}
+
+function filterBoxCommentsForModel(modelKey) {
+    // Return only comments for boxes belonging to this model
+    const filtered = {};
+    Object.entries(state.boxComments).forEach(([boxId, text]) => {
+        if (boxId.startsWith(modelKey + '|')) {
+            filtered[boxId] = text;
+        }
+    });
+    return filtered;
 }
 
 function updateQAUI(refreshSelect = true) {
@@ -662,6 +705,8 @@ function loadImage(filename) {
     renderImageList(); // Update active class
     updateQAUI(); // Update footer
     highlightMatchingDropdowns();
+    loadBoxCommentsForCurrentImage();
+    renderBoxCommentsSidebar(); // Update sidebar list
 
     // Set src for BOTH images
     const src = `/api/images/${filename}`;
@@ -1338,11 +1383,22 @@ function drawSingleBox(context, modelKey, box, modelColor, scaleFactor, isHovere
     // Flag Check
     const boxId = getBoxId(modelKey, box);
     const isFlagged = state.flaggedBoxes.has(boxId);
+    const hasComment = state.boxComments[boxId];
+    const isHighlighted = (state.highlightedCommentBox === boxId);
 
     if (isFlagged) {
         context.setLineDash([8 * scaleFactor, 4 * scaleFactor]);
     } else {
         context.setLineDash([]);
+    }
+
+    // Highlight override
+    if (isHighlighted) {
+        context.shadowColor = '#4a90e2'; // Accent blue
+        context.shadowBlur = 15;
+        context.lineWidth = (baseLineWidth + (4 * scaleFactor));
+    } else {
+        context.shadowBlur = 0;
     }
 
     if (isHidden) {
@@ -1394,6 +1450,20 @@ function drawSingleBox(context, modelKey, box, modelColor, scaleFactor, isHovere
         context.fillStyle = '#000';
         context.fillText(labelText, x + pad, textY);
     }
+
+    // Draw Comment Indicator (if has comment)
+    if (!isHidden && hasComment) {
+        context.beginPath();
+        const indicatorSize = 6 * scaleFactor;
+        // Position at top-right corner of box
+        context.arc(x + w, y, indicatorSize, 0, 2 * Math.PI);
+        context.fillStyle = '#FFD700'; // Gold
+        context.fill();
+        context.strokeStyle = '#000';
+        context.lineWidth = 1 * scaleFactor;
+        context.stroke();
+    }
+
     context.restore();
 }
 
@@ -1558,6 +1628,161 @@ function getBoxId(modelKey, box) {
     return `${modelKey}|${x.toFixed(2)},${y.toFixed(2)},${w.toFixed(2)},${h.toFixed(2)}|${box.class}`;
 }
 
+// -- Box Comments & Context Menu --
+
+async function saveBoxComment(modelKey) {
+    // Helper to save just this model's state including new comments
+    const currentQA = state.qaData[state.currentImage] || {};
+    const modelData = currentQA[modelKey] || {};
+
+    const boxCommentsForModel = filterBoxCommentsForModel(modelKey);
+
+    // Update local qaData mirrors
+    if (!state.qaData[state.currentImage]) state.qaData[state.currentImage] = {};
+    if (!state.qaData[state.currentImage][modelKey]) state.qaData[state.currentImage][modelKey] = {};
+
+    state.qaData[state.currentImage][modelKey].box_comments = JSON.stringify(boxCommentsForModel);
+
+    const status = modelData.status || (state.currentImage ? 'unreviewed' : '');
+    const comment = modelData.comment || "";
+    const flags = modelData.flags || "[]";
+
+    try {
+        const res = await fetch('/api/qa/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                image: state.currentImage,
+                model: modelKey,
+                status: status,
+                comment: comment,
+                flags: flags,
+                box_comments: JSON.stringify(boxCommentsForModel),
+                duration: ((Date.now() - state.startTime) / 1000)
+            })
+        });
+
+        if (res.ok) {
+            els.qaSavedStatus.textContent = "Saved Comment";
+            setTimeout(() => els.qaSavedStatus.textContent = "Synced", 2000);
+        }
+    } catch (err) {
+        console.error("Save Comment Failed:", err);
+    }
+}
+
+function handleCanvasContextMenu(e, targetCanvas) {
+    const rect = targetCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    let modelKeys = [];
+    if (state.comparisonMode) {
+        if (targetCanvas === els.canvasLeft && state.compareModelLeft) modelKeys = [state.compareModelLeft];
+        else if (targetCanvas === els.canvasRight && state.compareModelRight) modelKeys = [state.compareModelRight];
+    } else {
+        modelKeys = Object.keys(state.modelsConfig).filter(k => state.visibleModels[k]);
+    }
+
+    const box = getBoxAt(x, y, modelKeys, false);
+
+    if (box) {
+        // Find which model this box belongs to
+        const modelKey = getModelKeyForBox(box);
+        if (!modelKey) return;
+
+        // Show Popup
+        const boxId = getBoxId(modelKey, box);
+        els.commentPopup.dataset.boxId = boxId;
+        els.boxCommentInput.value = state.boxComments[boxId] || "";
+
+        els.commentPopup.style.display = 'flex';
+
+        // Positioning logic to keep onscreen
+        let px = e.clientX;
+        let py = e.clientY;
+
+        // Simple clamp
+        if (px + 250 > window.innerWidth) px = window.innerWidth - 260;
+        if (py + 200 > window.innerHeight) py = window.innerHeight - 210;
+
+        els.commentPopup.style.left = `${px}px`;
+        els.commentPopup.style.top = `${py}px`;
+
+        els.boxCommentInput.focus();
+    }
+}
+
+function renderBoxCommentsSidebar() {
+    if (!els.commentsSection) return;
+    els.commentsSection.innerHTML = '';
+
+    const entries = Object.entries(state.boxComments);
+    if (entries.length === 0) {
+        els.commentsSection.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">No specific box comments.</div>';
+        return;
+    }
+
+    entries.forEach(([boxId, comment]) => {
+        // boxId format: modelKey|x,y,w,h|class
+        const parts = boxId.split('|');
+        const modelKey = parts[0];
+        const cls = parts.length > 2 ? parts[2] : 'Unknown';
+
+        const modelName = state.modelsConfig[modelKey] ? (state.modelsConfig[modelKey].name || modelKey) : modelKey;
+        const color = state.modelsConfig[modelKey] ? state.modelsConfig[modelKey].renderColor : 'white';
+
+        const item = document.createElement('div');
+        item.className = 'sidebar-comment-item';
+        if (state.highlightedCommentBox === boxId) item.classList.add('active');
+
+        item.innerHTML = `
+            <div class="comment-header">
+                <span style="color: ${color}; font-weight: bold;">${modelName}</span>
+                <span>${cls}</span>
+            </div>
+            <div class="comment-text">${comment}</div>
+        `;
+
+        item.onclick = () => {
+            highlightBoxFromComment(boxId);
+        };
+
+        els.commentsSection.appendChild(item);
+    });
+}
+
+function highlightBoxFromComment(boxId) {
+    if (state.highlightedCommentBox === boxId) {
+        // Toggle off if clicking same
+        state.highlightedCommentBox = null;
+    } else {
+        state.highlightedCommentBox = boxId;
+
+        // Find the box to scale/pan to?
+        // We need to parse ID to find the actual box object in state.annotations
+        // Or we can just use the parsing logic to get approximate coords.
+        // Better to find the object to ensure we are looking at the right thing.
+        const box = findBoxById(boxId);
+        if (box) {
+            // Optional: center view on box?
+            // That might be jarring. Let's just highlight first.
+        }
+    }
+    renderBoxCommentsSidebar(); // Update active class
+    draw();
+}
+
+function findBoxById(targetId) {
+    // Search all annotations
+    for (const [modelKey, boxes] of Object.entries(state.annotations)) {
+        for (const box of boxes) {
+            if (getBoxId(modelKey, box) === targetId) return box;
+        }
+    }
+    return null;
+}
+
 // -- Event Listeners --
 
 function setupEventListeners() {
@@ -1692,6 +1917,11 @@ function setupEventListeners() {
             // Reuse handleCanvasClick essentially or ignore.
         };
 
+        canvas.oncontextmenu = (e) => {
+            e.preventDefault();
+            handleCanvasContextMenu(e, canvas);
+        };
+
         canvas.onwheel = (e) => {
             e.preventDefault();
             const rect = canvas.getBoundingClientRect();
@@ -1787,21 +2017,24 @@ function setupEventListeners() {
 
     window.onmouseup = (e) => {
         if (state.transform.isDragging) {
-            const dist = Math.abs(e.clientX - rawStartX) + Math.abs(e.clientY - rawStartY);
-            if (dist < 5) {
-                // Determine which canvas was clicked
-                // We can check boundaries again
-                const rectLeft = els.canvasLeft.getBoundingClientRect();
-                const rectRight = els.canvasRight.getBoundingClientRect();
+            // Only toggle on Left Click (button 0)
+            if (e.button === 0) {
+                const dist = Math.abs(e.clientX - rawStartX) + Math.abs(e.clientY - rawStartY);
+                if (dist < 5) {
+                    // Determine which canvas was clicked
+                    const rectLeft = els.canvasLeft.getBoundingClientRect();
+                    const rectRight = els.canvasRight.getBoundingClientRect();
 
-                if (e.clientX >= rectLeft.left && e.clientX <= rectLeft.right && e.clientY >= rectLeft.top && e.clientY <= rectLeft.bottom) {
-                    handleCanvasClick(e, els.canvasLeft);
-                } else if (state.comparisonMode && e.clientX >= rectRight.left && e.clientX <= rectRight.right && e.clientY >= rectRight.top && e.clientY <= rectRight.bottom) {
-                    handleCanvasClick(e, els.canvasRight);
+                    if (e.clientX >= rectLeft.left && e.clientX <= rectLeft.right && e.clientY >= rectLeft.top && e.clientY <= rectLeft.bottom) {
+                        handleCanvasClick(e, els.canvasLeft);
+                    } else if (state.comparisonMode && e.clientX >= rectRight.left && e.clientX <= rectRight.right && e.clientY >= rectRight.top && e.clientY <= rectRight.bottom) {
+                        handleCanvasClick(e, els.canvasRight);
+                    }
                 }
             }
         }
         state.transform.isDragging = false;
+
 
         // Sidebar Resize End
         if (state.isResizingSidebar) {
@@ -1819,7 +2052,36 @@ function setupEventListeners() {
 
         debouncedSaveSettings();
     };
-    // els.canvas.style.cursor = 'grab'; // Removed undefined ref
+
+    // Popup Listeners
+    if (els.btnSaveComment) {
+        els.btnSaveComment.onclick = () => {
+            const boxId = els.commentPopup.dataset.boxId;
+            const text = els.boxCommentInput.value.trim();
+
+            if (boxId) {
+                if (text) {
+                    state.boxComments[boxId] = text;
+                } else {
+                    delete state.boxComments[boxId];
+                }
+
+                // Trigger Save
+                const modelKey = boxId.split('|')[0];
+                saveBoxComment(modelKey);
+
+                renderBoxCommentsSidebar(); // Update sidebar
+                draw();
+            }
+            els.commentPopup.style.display = 'none';
+        };
+    }
+
+    if (els.btnCancelComment) {
+        els.btnCancelComment.onclick = () => {
+            els.commentPopup.style.display = 'none';
+        };
+    }
 }
 
 function updateUnhideButtonState() {
