@@ -775,9 +775,16 @@ function toggleSidebar(side) {
     if (side === 'left') {
         state.leftSidebarOpen = !state.leftSidebarOpen;
         els.sidebarLeft.classList.toggle('collapsed', !state.leftSidebarOpen);
+        // Toggle button rotation
+        const btn = document.getElementById('btn-toggle-left');
+        if (btn) btn.classList.toggle('collapsed', !state.leftSidebarOpen);
+
     } else if (side === 'right') {
         state.rightSidebarOpen = !state.rightSidebarOpen;
         els.sidebarRight.classList.toggle('collapsed', !state.rightSidebarOpen);
+        // Toggle button rotation
+        const btn = document.getElementById('btn-toggle-right');
+        if (btn) btn.classList.toggle('collapsed', !state.rightSidebarOpen);
     }
 
     // Wait for transition to end before refitting? Or just let it happen?

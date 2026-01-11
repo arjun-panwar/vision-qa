@@ -149,6 +149,37 @@ body {
     color: var(--accent);
 }
 
+.btn-toggle {
+    background: none;
+    border: none;
+    border-radius: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0;
+}
+
+.btn-toggle:hover {
+    background: none;
+    color: var(--accent);
+    border: none;
+    box-shadow: none;
+}
+
+.btn-toggle svg {
+    transition: transform 0.3s ease;
+}
+
+/* Specific rotation logic handled by JS adding .collapsed class to button */
+.btn-toggle.collapsed svg {
+    transform: rotate(180deg);
+}
+
 #image-list {
     list-style: none;
     overflow-y: auto;
