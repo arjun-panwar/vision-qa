@@ -612,3 +612,40 @@ input[type=range] {
     color: white;
     text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 }
+/* Segmented Control */
+.segmented-control {
+    display: inline-flex;
+    background-color: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 0;
+    overflow: hidden;
+}
+
+.segmented-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-right: 1px solid var(--border);
+}
+
+.segmented-btn:last-child {
+    border-right: none;
+}
+
+.segmented-btn:hover {
+    background-color: #333;
+    color: var(--text-main);
+}
+
+.segmented-btn.active {
+    background-color: var(--accent); /* Bright blue */
+    color: white;
+}

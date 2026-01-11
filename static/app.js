@@ -302,9 +302,7 @@ async function setQAStatus(status) {
     // For now, simple switch.
 
     if (els.qaModelSelect) {
-        els.qaModelSelect.onchange = () => {
-            updateQAUI(false); // Update UI based on new selection (don't re-render list)
-        };
+        // No change event on div, buttons handle clicks
     }
 }
 
@@ -313,10 +311,16 @@ async function setQAStatus(status) {
     updateQAState(status, els.qaComment.value);
 }
 
+function getSelectedQAModel() {
+    if (!els.qaModelSelect) return null;
+    const activeBtn = els.qaModelSelect.querySelector('.segmented-btn.active');
+    return activeBtn ? activeBtn.dataset.value : null;
+}
+
 async function updateQAState(status, comment) {
     if (!state.currentImage) return;
 
-    const selectedModel = els.qaModelSelect ? els.qaModelSelect.value : null;
+    const selectedModel = getSelectedQAModel();
     if (!selectedModel) {
         console.warn("No model selected for QA");
         return;
@@ -383,28 +387,45 @@ function updateQAUI(refreshSelect = true) {
 
     const modelKeys = Object.keys(state.modelsConfig).sort();
 
-    // Populate Select if needed
-    if (els.qaModelSelect && (refreshSelect || els.qaModelSelect.options.length === 0)) {
-        const currentVal = els.qaModelSelect.value;
-        const desiredVal = currentVal || modelKeys[0]; // Keep current or default to first
+    // Populate Segmented Control if needed
+    // Logic: check if we have the right number of buttons or if forced refresh
+    const currentBtns = els.qaModelSelect.querySelectorAll('.segmented-btn');
+    if (els.qaModelSelect && (refreshSelect || currentBtns.length === 0)) {
+        // Determine currently active model to preserve selection
+        const currentActive = getSelectedQAModel();
+        const desiredVal = currentActive || modelKeys[0];
 
         els.qaModelSelect.innerHTML = '';
         modelKeys.forEach(key => {
-            const opt = document.createElement('option');
-            opt.value = key;
-            opt.textContent = state.modelsConfig[key].name || key;
-            els.qaModelSelect.appendChild(opt);
+            const btn = document.createElement('button');
+            btn.className = 'segmented-btn';
+            btn.textContent = state.modelsConfig[key].name || key;
+            btn.dataset.value = key;
+
+            if (key === desiredVal) {
+                btn.classList.add('active');
+            }
+
+            btn.onclick = () => {
+                // Switch active state
+                const allBtns = els.qaModelSelect.querySelectorAll('.segmented-btn');
+                allBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                updateQAUI(false); // Update UI for this model
+            };
+
+            els.qaModelSelect.appendChild(btn);
         });
 
-        // Try to restore value
-        if (desiredVal && modelKeys.includes(desiredVal)) {
-            els.qaModelSelect.value = desiredVal;
-        } else if (modelKeys.length > 0) {
-            els.qaModelSelect.value = modelKeys[0];
+        // Safety: if nothing active, activate first
+        if (!getSelectedQAModel() && modelKeys.length > 0) {
+            const first = els.qaModelSelect.querySelector('.segmented-btn');
+            if (first) first.classList.add('active');
         }
     }
 
-    const selectedModel = els.qaModelSelect ? els.qaModelSelect.value : null;
+    const selectedModel = getSelectedQAModel();
     const imgData = state.qaData[state.currentImage] || {};
     // Ensure we handle the nested structure correctly.
     // imgData might have keys like "modelA", "modelB" OR "status" if legacy.
@@ -769,7 +790,12 @@ function renderModelToggles() {
 
                 // Sync QA selector to this model
                 if (els.qaModelSelect) {
-                    els.qaModelSelect.value = key;
+                    // Update Active Button
+                    const btns = els.qaModelSelect.querySelectorAll('.segmented-btn');
+                    btns.forEach(b => {
+                        if (b.dataset.value === key) b.classList.add('active');
+                        else b.classList.remove('active');
+                    });
                     updateQAUI(false); // Refresh UI for this model
                 }
             }
