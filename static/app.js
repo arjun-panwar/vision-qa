@@ -128,6 +128,7 @@ const els = {
     commentPopup: document.getElementById('comment-popup'),
     boxCommentInput: document.getElementById('box-comment-input'),
     btnSaveComment: document.getElementById('btn-save-comment'),
+    btnDeleteComment: document.getElementById('btn-delete-comment'),
     btnCancelComment: document.getElementById('btn-cancel-comment')
 };
 
@@ -1694,7 +1695,13 @@ function handleCanvasContextMenu(e, targetCanvas) {
         // Show Popup
         const boxId = getBoxId(modelKey, box);
         els.commentPopup.dataset.boxId = boxId;
-        els.boxCommentInput.value = state.boxComments[boxId] || "";
+        const existingComment = state.boxComments[boxId] || "";
+        els.boxCommentInput.value = existingComment;
+
+        // Show/Hide Delete Button
+        if (els.btnDeleteComment) {
+            els.btnDeleteComment.style.display = existingComment ? 'block' : 'none';
+        }
 
         els.commentPopup.style.display = 'flex';
 
@@ -1739,17 +1746,54 @@ function renderBoxCommentsSidebar() {
         item.innerHTML = `
             <div class="comment-header">
                 <span style="color: ${color}; font-weight: bold;">${modelName}</span>
-                <span>${cls}</span>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">${cls}</span>
+                    <span class="sidebar-delete-icon" title="Delete Comment">×</span>
+                </div>
             </div>
             <div class="comment-text">${comment}</div>
         `;
 
-        item.onclick = () => {
+        // Handle Item Click (Highlight)
+        item.onclick = (e) => {
+            // Avoid triggering if delete clicked
+            if (e.target.classList.contains('sidebar-delete-icon')) return;
             highlightBoxFromComment(boxId);
         };
 
+        // Handle Delete Click
+        const deleteBtn = item.querySelector('.sidebar-delete-icon');
+        if (deleteBtn) {
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation(); // prevent highlight
+                deleteBoxComment(boxId);
+            };
+        }
+
         els.commentsSection.appendChild(item);
     });
+}
+
+async function deleteBoxComment(boxId) {
+    if (!state.boxComments[boxId]) return;
+
+    delete state.boxComments[boxId];
+    if (state.highlightedCommentBox === boxId) {
+        state.highlightedCommentBox = null;
+    }
+
+    // Update UI IMMEDIATELY (Optimistic)
+    renderBoxCommentsSidebar();
+    draw();
+
+    // Also hide popup if open for this box
+    if (els.commentPopup.dataset.boxId === boxId) {
+        els.commentPopup.style.display = 'none';
+    }
+
+    // Trigger Save background
+    const modelKey = boxId.split('|')[0];
+    await saveBoxComment(modelKey);
 }
 
 function highlightBoxFromComment(boxId) {
@@ -2074,6 +2118,15 @@ function setupEventListeners() {
                 draw();
             }
             els.commentPopup.style.display = 'none';
+        };
+    }
+
+    if (els.btnDeleteComment) {
+        els.btnDeleteComment.onclick = () => {
+            const boxId = els.commentPopup.dataset.boxId;
+            if (boxId && state.boxComments[boxId]) {
+                deleteBoxComment(boxId);
+            }
         };
     }
 
