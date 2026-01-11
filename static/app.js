@@ -204,15 +204,17 @@ async function fetchConfig() {
 
         if (els.imageNameDisplay) {
             els.imageNameDisplay.onclick = () => {
-                if (!state.currentImage) return;
-                navigator.clipboard.writeText(state.currentImage).then(() => {
-                    // Feedback via Tooltip
-                    if (els.copyTooltip) {
-                        els.copyTooltip.style.opacity = '1';
-                        setTimeout(() => {
-                            els.copyTooltip.style.opacity = '0';
-                        }, 1000);
-                    }
+                const currentFn = state.currentImage;
+                if (!currentFn) return;
+                navigator.clipboard.writeText(currentFn).then(() => {
+                    // Feedback: Change text
+                    els.imageNameDisplay.textContent = "Copied!";
+                    setTimeout(() => {
+                        // Restore if still on same image
+                        if (state.currentImage === currentFn) {
+                            els.imageNameDisplay.textContent = currentFn;
+                        }
+                    }, 1000);
                 }).catch(err => {
                     console.error('Failed to copy: ', err);
                 });
