@@ -82,9 +82,7 @@ const els = {
     mainView: document.querySelector('.main-view'),
 
     // Comparison Controls
-    btnCompare: document.getElementById('btn-compare'),
-    // Comparison Controls
-    btnCompare: document.getElementById('btn-compare'),
+    modeSelect: document.getElementById('mode-select'),
 
     modelToggles: document.getElementById('model-toggles'),
     confSlider: document.getElementById('conf-slider'),
@@ -878,15 +876,21 @@ function renderClassFilters() {
     });
 }
 
-function toggleComparisonMode() {
-    state.comparisonMode = !state.comparisonMode;
+function setMode(mode) {
+    const isCompare = (mode === 'compare');
+    if (state.comparisonMode === isCompare) return;
+
+    state.comparisonMode = isCompare;
 
     // UI Updates
-    els.btnCompare.classList.toggle('active', state.comparisonMode);
-    // compareControls removed
+    if (els.modeSelect) {
+        const buttons = els.modeSelect.querySelectorAll('.segmented-btn');
+        buttons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.value === mode);
+        });
+    }
+
     els.containerRight.style.display = state.comparisonMode ? 'block' : 'none';
-    // Wait, els definition is els.containerRight defined in Step 47-ish.
-    // Check definition: els.containerRight. In index.html: style="display: none; ..."
 
     if (state.comparisonMode) {
         els.mainView.classList.add('split-view');
@@ -921,9 +925,6 @@ function toggleComparisonMode() {
     }
 
     // Refit after layout change
-    // Force a re-fit by resetting transform state momentarily if needed, 
-    // or we can just bypass the check in fitImageToScreen by passing a flag.
-    // Simpler: Reset state, then fit.
     state.transform = { x: 0, y: 0, scale: 1, isDragging: false };
     updateTransform();
 
@@ -1549,7 +1550,14 @@ function setupEventListeners() {
         };
     }
 
-    els.btnCompare.onclick = toggleComparisonMode;
+    if (els.modeSelect) {
+        const buttons = els.modeSelect.querySelectorAll('.segmented-btn');
+        buttons.forEach(btn => {
+            btn.onclick = () => {
+                setMode(btn.dataset.value);
+            };
+        });
+    }
 
     const container = els.container; // Legacy or unused?
     let rawStartX = 0;
