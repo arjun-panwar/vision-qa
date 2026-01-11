@@ -491,4 +491,124 @@ input[type=range] {
     background-color: var(--accent);
     color: white;
     border-color: var(--accent);
+}/* Model Selector Buttons */
+.model-selector-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+    border-radius: 8px;
+    background-color: var(--bg-panel);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    overflow: hidden;
+}
+
+.model-selector-item:hover {
+    background-color: #383838;
+    transform: translateY(-1px);
+    border-color: #555;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.model-selector-item.active {
+    background-color: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border-width: 1px;
+    border-color: currentColor;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5) inset, 0 4px 12px rgba(0, 0, 0, 0.2);
+    transform: translateY(-1px);
+}
+
+/* The indicator dot/icon container */
+.model-selection-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--text-muted);
+    margin-right: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    flex-shrink: 0;
+    background-color: transparent;
+    position: relative;
+}
+
+.model-selector-item.compare-mode .model-selection-icon {
+    border-radius: 4px;
+    /* Square for checkbox feel */
+}
+
+/* Active state of the icon */
+.model-selector-item.active .model-selection-icon {
+    border-color: currentColor;
+    background-color: currentColor;
+    box-shadow: 0 0 10px currentColor;
+}
+
+/* The actual indicator (Dot for Radio / Checkmark for Checkbox) */
+.model-selection-icon::after {
+    content: '';
+    display: block;
+    width: 10px;
+    height: 10px;
+    background-color: #000;
+    /* Contrast color for dot */
+    border-radius: 50%;
+    transform: scale(0);
+    opacity: 0;
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
+    /* Center the dot */
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    margin-top: -5px;
+    margin-left: -5px;
+}
+
+/* Active State: Show Dot */
+.model-selector-item.active .model-selection-icon::after {
+    transform: scale(1);
+    opacity: 1;
+}
+
+/* Compare Mode: Switch to Checkmark */
+.model-selector-item.compare-mode .model-selection-icon::after {
+    width: 6px;
+    height: 10px;
+    background-color: transparent;
+    border-radius: 0;
+    border: solid #000;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg) scale(0);
+    margin-top: -7px;
+    margin-left: -3px;
+}
+
+/* Active State for Checkmark */
+.model-selector-item.compare-mode.active .model-selection-icon::after {
+    transform: rotate(45deg) scale(1);
+    opacity: 1;
+}
+
+.model-name {
+    flex: 1;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    transition: color 0.2s;
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.model-selector-item.active .model-name {
+    color: white;
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 }

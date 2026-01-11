@@ -191,9 +191,10 @@ async function fetchConfig() {
             applyVisualSettings(data.settings);
         }
 
-        // Initialize visible models (all true by default)
-        Object.keys(state.modelsConfig).forEach(key => {
-            state.visibleModels[key] = true;
+        // Initialize visible models (only first one true by default)
+        const modelKeys = Object.keys(state.modelsConfig).sort();
+        modelKeys.forEach((key, index) => {
+            state.visibleModels[key] = (index === 0);
         });
 
         // Initialize Class Filters from Global Labels
@@ -624,26 +625,63 @@ function renderModelToggles() {
     els.modelToggles.innerHTML = '';
     const keys = Object.keys(state.modelsConfig).sort();
 
+    // Safety check: If not in comparison mode, ensure exactly one model is visible
+    if (!state.comparisonMode && keys.length > 0) {
+        els.modelToggles.style.display = 'block'; // Ensure visible in normal mode
+        const visibleCount = keys.filter(k => state.visibleModels[k]).length;
+        if (visibleCount !== 1) {
+            keys.forEach((k, i) => state.visibleModels[k] = (i === 0));
+        }
+    } else if (state.comparisonMode) {
+        // In compare mode, hide the model selection list entirely
+        els.modelToggles.style.display = 'none';
+        return;
+    }
+    // Ensure visible if we fall through (e.g. initial load)
+    els.modelToggles.style.display = 'block';
+
     keys.forEach((key, idx) => {
         const info = state.modelsConfig[key];
         const color = CONFIG.colors[idx % CONFIG.colors.length];
         state.modelsConfig[key].renderColor = color;
 
-        const label = document.createElement('label');
-        label.className = 'checkbox-label';
-        label.style.color = color;
+        const item = document.createElement('div');
+        item.className = `model-selector-item ${state.visibleModels[key] ? 'active' : ''}`;
 
-        const input = document.createElement('input');
-        input.type = 'checkbox';
-        input.checked = state.visibleModels[key];
-        input.onchange = (e) => {
-            state.visibleModels[key] = e.target.checked;
+        // If we implement comparison mode toggling later, this class visualizes the difference (square vs round)
+        if (state.comparisonMode) {
+            item.classList.add('compare-mode');
+        }
+        item.style.color = color;
+
+        // Icon
+        const icon = document.createElement('div');
+        icon.className = 'model-selection-icon';
+
+        // Name
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'model-name';
+        nameSpan.textContent = info.name || key;
+
+        item.appendChild(icon);
+        item.appendChild(nameSpan);
+
+        // Click Handler
+        item.onclick = () => {
+            if (state.comparisonMode) {
+                // Checkbox behavior
+                state.visibleModels[key] = !state.visibleModels[key];
+            } else {
+                // Radio behavior: Select this one, deselect others
+                keys.forEach(k => {
+                    state.visibleModels[k] = (k === key);
+                });
+            }
+            renderModelToggles();
             draw();
         };
 
-        label.appendChild(input);
-        label.appendChild(document.createTextNode(` ${info.name || key}`));
-        els.modelToggles.appendChild(label);
+        els.modelToggles.appendChild(item);
     });
 }
 
@@ -825,6 +863,8 @@ function toggleComparisonMode() {
     // Simpler: Reset state, then fit.
     state.transform = { x: 0, y: 0, scale: 1, isDragging: false };
     updateTransform();
+
+    renderModelToggles();
 
     setTimeout(() => {
         resizeCanvas();
