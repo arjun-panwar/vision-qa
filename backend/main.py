@@ -61,7 +61,15 @@ class ProjectState:
     def update(self, root_path, config, save=True):
         self.root_dir = root_path
         self.config = config
-        self.images_dir = os.path.join(self.root_dir, "images")
+        
+        if "image_directory" in config:
+            custom_img_dir = config["image_directory"]
+            if os.path.isabs(custom_img_dir):
+                self.images_dir = os.path.normpath(custom_img_dir)
+            else:
+                self.images_dir = os.path.normpath(os.path.join(self.root_dir, custom_img_dir))
+        else:
+            self.images_dir = os.path.join(self.root_dir, "images")
         
         # Parse global labels
         self.labels = config.get("labels", {})
