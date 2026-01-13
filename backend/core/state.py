@@ -83,7 +83,8 @@ class ProjectState:
                 self.models[key] = {
                     "name": val.get("model_name", key),
                     "dir": json_dir,
-                    "color": val.get("color", None)
+                    "color": val.get("color", None),
+                    "format": val.get("format", "default")
                 }
         
         if save:

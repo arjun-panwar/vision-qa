@@ -173,22 +173,42 @@ async def get_image(filename: str):
 @app.get("/api/data/{filename}")
 async def get_annotations(filename: str):
     base_name = os.path.splitext(filename)[0]
-    json_name = f"{base_name}.json"
+    base_name = os.path.splitext(filename)[0]
     
     response = {}
     
+    # Get image size from config as fallback
+    default_img_size = state.config.get("img_size", 640)
+    # If it's a single int, convert to tuple
+    if isinstance(default_img_size, int):
+        img_dims = (default_img_size, default_img_size)
+    else:
+        img_dims = (640, 640)
+
     for model_key, model_info in state.models.items():
         json_dir = model_info["dir"] # This is a Path object from state
-        json_path = json_dir / json_name
+        model_format = model_info.get("format", "default")
+        
+        # Determine file extension based on format
+        ext = ".txt" if model_format == "yolo" else ".json"
+        file_path = json_dir / f"{base_name}{ext}"
+        
         response[model_key] = []
         
-        if json_path.exists():
+        if file_path.exists():
             try:
-                with open(json_path, "r") as f:
-                    raw_data = json.load(f)
-                    response[model_key] = normalize_data(raw_data)
+                # Read content
+                content = None
+                if ext == ".txt":
+                    with open(file_path, "r") as f:
+                        content = f.readlines()
+                else:
+                    with open(file_path, "r") as f:
+                        content = json.load(f)
+                
+                response[model_key] = normalize_data(content, format=model_format, img_size=img_dims, labels_map=state.labels)
             except Exception as e:
-                logger.error(f"Error reading {json_path}: {e}")
+                logger.error(f"Error reading {file_path}: {e}")
                 
     return response
 
@@ -212,3 +232,5 @@ async def get_qa_stats():
 @app.get("/dashboard")
 async def dashboard_page():
     return FileResponse("static/dashboard.html")
+
+

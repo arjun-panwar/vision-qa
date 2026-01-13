@@ -31,7 +31,8 @@ You can define any number of models. The application identifies a model by looki
 | Key | Type | Description |
 | :--- | :--- | :--- |
 | `model_name` | `string` | **Required.** The human-readable name displayed in the UI. |
-| `jsons_dir` | `string` | **Optional.** Directory containing the JSON annotation files for this model. Defaults to `{key}_json` if omitted. |
+| `jsons_dir` | `string` | **Optional.** Directory containing the annotation files for this model. Defaults to `{key}_json` if omitted. |
+| `format` | `string` | **Optional.** Format of the annotation files. Options: `default` (JSON), `yolo` (TXT), `labelme` (JSON). Defaults to `default`. |
 | `color` | `string` | **Optional.** A specific hex color (e.g., `#ff0000`) to use for this model's bounding boxes. If omitted, a color is assigned automatically. |
 | `version` | `string` | **Metadata.** Displayed in the Dashboard details. |
 | `weights_file` | `string` | **Metadata.** Displayed in the Dashboard details. |
@@ -46,8 +47,13 @@ model_v1:
 
 model_v2:
   model_name: "YOLOv8 Fine-tuned"
-  jsons_dir: "predictions_v2"
   color: "#00ff00"
+
+model_gt:
+  model_name: "Ground Truth"
+  jsons_dir: "labels"
+  format: "yolo"
+  color: "#ffffff"
 ```
 
 ### 3. Metadata Fields
