@@ -76,7 +76,7 @@ This application is a **FastAPI-backed Computer Vision Visualization Tool**. It 
 
 **Logic Flow**:
 ```text
-[Page Load] --> [fetchStats()] --> [Render Top Metrics]
+[Page Load] --> [fetchStats()] --> [Render Detailed Stats & Charts]
                                          |
                                 [Iterate Models]
                                          |

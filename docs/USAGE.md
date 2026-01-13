@@ -50,3 +50,13 @@ Once the server is running, open your web browser and navigate to:
     - Mark images as "Correct", "Incorrect", or "Doubtful" using the buttons at the bottom.
     - Add comments if necessary.
     - Status is saved to `qa_status.xlsx` in your project folder.
+
+5.  **Dashboard**:
+    - Access the dashboard by clicking the "Dashboard" button in the top right or navigating to `/dashboard`.
+    - **Statistics**: View detailed metrics per model:
+        - **Reviewed/Unreviewed**: Track progress.
+        - **Flagged**: Monitor flagged images.
+        - **Comments**: See the number of images with comments.
+        - **Results**: Breakdown of Correct, Incorrect, and Doubtful predictions.
+        - **Avg Time**: Average time taken per image.
+    - **Visualizations**: Bar charts showing the distribution of QA results.
