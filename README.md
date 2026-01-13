@@ -69,7 +69,25 @@ Open your browser and navigate to:
 3.  **Load**: In the web app, click "Load Project" and select your project directory (e.g., `project2`).
 4.  **Analyze**: Use the sidebar to navigate images, toggle models, and perform QA.
 
-## Helper Scripts
+## Project Structure
+
+A typical project folder (e.g., `project2/`) should be organized as follows:
+
+```text
+project_folder/
+├── model_config.yaml       # Project configuration (models, labels, paths)
+├── images/                 # Directory containing source images
+├── viz_config.json         # Local visualization settings (auto-generated)
+├── qa_status.xlsx          # QA session data and comments (auto-generated)
+├── predictions_json/       # Model predictions (JSON format)
+└── ground_truth_labels/    # Ground truth annotations (YOLO .txt format)
+```
+
+- **`model_config.yaml`**: The entry point for the tool. Use this to tell the app where your images and labels are.
+- **`qa_status.xlsx`**: Created automatically when you first save a QA status. Stores your "Correct/Incorrect" labels and comments.
+- **`viz_config.json`**: Stores your local UI preferences (line width, opacity, etc.) for this specific project.
+
+
 
 The `helper_script/` directory contains useful tools:
 
