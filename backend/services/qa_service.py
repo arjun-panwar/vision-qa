@@ -210,13 +210,51 @@ def get_qa_stats() -> Dict[str, Any]:
             # Status Counts
             status_counts = {"correct": 0, "incorrect": 0, "doubtful": 0}
             
+            # Additional Stats
+            flagged_count = 0
+            comment_count = 0
+            reviewed_count = 0
+            
             if col_status and col_status in df.columns:
-                 counts = df[col_status].value_counts().to_dict()
+                 # Filter for non-empty status for reviewed count
+                 reviewed_mask = df[col_status].notna() & (df[col_status] != "")
+                 reviewed_count = int(reviewed_mask.sum())
+                 
+                 counts = df[df[col_status].notna()][col_status].value_counts().to_dict()
                  # Merge safely
                  for k, v in counts.items():
                      k_str = str(k).lower() # ensure keys are normalized
                      if k_str in status_counts:
                          status_counts[k_str] = int(v)
+
+            # Flagged Count
+            col_flags = f"{found_prefix}_flags" if found_prefix else None
+            if col_flags and col_flags in df.columns:
+                # Count rows where flags is not empty strings
+                flagged_count = int((df[col_flags].notna() & (df[col_flags].astype(str).str.strip() != "")).sum())
+
+            # Comment Count (Image-level + Box-level)
+            col_comment = f"{found_prefix}_comment" if found_prefix else None
+            col_box_comments = f"{found_prefix}_box_comments" if found_prefix else None
+            
+            # We treat "comment count" as number of images with ANY comment (box or image level)
+            # OR we can sum them up? User said "number of comments". 
+            # Let's count *images* with comments for now, or just sum of fields?
+            # "number of comments" usually implies total comments.
+            # But here we have 1 text field per image for image_comment and 1 text field for box_comments (JSON string?)
+            # Let's just count how many images have comments for now as a simple metric.
+            
+            has_img_comment = pd.Series([False] * len(df))
+            if col_comment and col_comment in df.columns:
+                has_img_comment = df[col_comment].notna() & (df[col_comment].astype(str).str.strip() != "")
+                
+            has_box_comment = pd.Series([False] * len(df))
+            if col_box_comments and col_box_comments in df.columns:
+                has_box_comment = df[col_box_comments].notna() & (df[col_box_comments].astype(str).str.strip() != "")
+            
+            # Union of images with either
+            comment_count = int((has_img_comment | has_box_comment).sum())
+
             
             # Duration Stats
             avg_duration = 0
@@ -237,6 +275,12 @@ def get_qa_stats() -> Dict[str, Any]:
             stats["models"][model_key] = {
                 "name": model_name_human,
                 "counts": status_counts,
+                "stats": {
+                    "reviewed": reviewed_count,
+                    "unreviewed": max(0, total_images - reviewed_count),
+                    "flagged": flagged_count,
+                    "comments": comment_count
+                },
                 "avg_duration": round(avg_duration, 2),
                 "details": details
             }

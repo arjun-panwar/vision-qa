@@ -70,13 +70,8 @@ function createModelSection(container, modelName, data) {
     const detailsDiv = document.createElement("div");
     detailsDiv.style.textAlign = "right";
 
-    // Duration
-    const durationDiv = document.createElement("div");
-    durationDiv.style.color = "var(--text-muted)";
-    durationDiv.style.fontSize = "0.9rem";
-    durationDiv.innerText = `Avg Time: ${data.avg_duration}s`;
+    // Duration (moved to stats grid)
 
-    detailsDiv.appendChild(durationDiv);
 
     // Extra Details from Config
     if (data.details) {
@@ -91,6 +86,57 @@ function createModelSection(container, modelName, data) {
 
     header.appendChild(detailsDiv);
     card.appendChild(header);
+
+    // Stats Grid
+    const statsGrid = document.createElement("div");
+    statsGrid.style.display = "grid";
+    // Responsive grid: auto-fit with min width
+    statsGrid.style.gridTemplateColumns = "repeat(auto-fit, minmax(100px, 1fr))";
+    statsGrid.style.gap = "10px";
+    statsGrid.style.marginBottom = "15px";
+    statsGrid.style.marginTop = "10px";
+    statsGrid.style.padding = "10px";
+    statsGrid.style.background = "var(--bg-secondary)";
+    statsGrid.style.borderRadius = "8px";
+
+    const createStatItem = (label, value, color) => {
+        const div = document.createElement("div");
+        div.style.textAlign = "center";
+
+        const valDiv = document.createElement("div");
+        valDiv.style.fontSize = "1.2rem";
+        valDiv.style.fontWeight = "bold";
+        valDiv.style.color = color || "var(--text-primary)";
+        valDiv.innerText = value;
+
+        const labelDiv = document.createElement("div");
+        labelDiv.style.fontSize = "0.8rem";
+        labelDiv.style.color = "var(--text-muted)";
+        labelDiv.innerText = label;
+
+        div.appendChild(valDiv);
+        div.appendChild(labelDiv);
+        return div;
+    };
+
+    if (data.stats) {
+        // Row 1: General Stats
+        statsGrid.appendChild(createStatItem("Reviewed", data.stats.reviewed, "var(--success)"));
+        statsGrid.appendChild(createStatItem("Unreviewed", data.stats.unreviewed, "var(--text-muted)"));
+        statsGrid.appendChild(createStatItem("Flagged", data.stats.flagged, "var(--error)"));
+        statsGrid.appendChild(createStatItem("Comments", data.stats.comments, "var(--warning)"));
+
+        // Row 2 (implicitly via grid auto-flow): Results
+        // Get counts safely
+        const getCount = (k) => data.counts[k] || data.counts[k.toLowerCase()] || 0;
+
+        statsGrid.appendChild(createStatItem("Correct", getCount("correct"), "rgba(34, 197, 94, 1)"));
+        statsGrid.appendChild(createStatItem("Incorrect", getCount("incorrect"), "rgba(239, 68, 68, 1)"));
+        statsGrid.appendChild(createStatItem("Doubtful", getCount("doubtful"), "rgba(234, 179, 8, 1)"));
+        statsGrid.appendChild(createStatItem("Avg Time (s)", data.avg_duration, "var(--text-primary)"));
+    }
+
+    card.appendChild(statsGrid);
 
     // Canvas Container
     const canvasContainer = document.createElement("div");
