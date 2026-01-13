@@ -5,3 +5,4 @@ __pycache__/
 .project_cache.json
 project1
 .agent
+*.log
