@@ -2,7 +2,10 @@
 
 VisionQA is a powerful web-based tool designed for visualizing, comparing, and quality-assuring (QA) object detection models. It supports standard YOLO formats and generic JSON predictions, making it ideal for verifying model performance against ground truth and tracking dataset quality.
 
-![VisionQA Demo](docs/images_videos/VisionQA-Demo.mp4)
+<video width="720" controls>
+  <source src="docs/images_videos/VisionQA-Demo.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
 
 ## Key Features
 
@@ -14,7 +17,7 @@ VisionQA is a powerful web-based tool designed for visualizing, comparing, and q
   - Track review progress.
 - **Comparison Mode**: Side-by-side view to compare two different models directly.
   
-  ![Comparison Mode](docs/images/comparison_mode.png)
+  ![Comparison Mode](docs/images_videos/comparison_mode.png)
 
 - **Analytics Dashboard**: Comprehensive statistics on model performance, class distribution, and QA progress.
 - **Flexible Configuration**: simple `yaml` configuration for defining models, paths, and labels.
