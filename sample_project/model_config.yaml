@@ -1,0 +1,31 @@
+task: detect
+img_size: 640
+image_directory: /home/arjun/Documents/presonal/vision-qa/sample_project/images
+labels:
+  0: person
+  1: bicycle
+  2: car
+  3: motorcycle
+  4: airplane
+  5: bus
+  6: train
+  7: truck
+  8: boat
+  9: traffic light
+confidence_threshold: 0.35
+description: YOLOv12m object detection on Vehicle Detection Dataset
+model_v1:
+  model_name: yolov8n
+  jsons_dir: yolov8n_json
+  weights_file: yolov8n.pt
+  version: v8n
+model_v2:
+  model_name: yolo11n
+  jsons_dir: yolo11n_json
+  weights_file: yolo11n.pt
+  version: v11n
+# model_gt:
+#   model_name: ground_truth
+#   jsons_dir: labels
+#   format: yolo
+#   version: gt

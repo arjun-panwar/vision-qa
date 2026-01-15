@@ -1,0 +1,50 @@
+{
+    "lineWidth": 5,
+    "fontSize": 14,
+    "ghostOpacity": 0.6,
+    "showLabels": true,
+    "showScores": true,
+    "classColors": {
+        "empty_truck": "#ff0000",
+        "human": "#00ff00",
+        "license_plate": "#0000ff",
+        "other_vehicle": "#ffff00",
+        "tractor": "#00ffff",
+        "trailer": "#ff00ff",
+        "trailer_id": "#ff8000",
+        "trailer_top": "#0080ff",
+        "truck": "#ffff00",
+        "yard_mule": "#808080",
+        "airplane": "#722F8D",
+        "bicycle": "#5D8C25",
+        "boat": "#4D2F98",
+        "bus": "#ff0000",
+        "car": "#4CE626",
+        "motorcycle": "#B7BBE2",
+        "person": "#00CA4A",
+        "traffic light": "#EB4469",
+        "train": "#19A461",
+        "undefined": "#7D00CE"
+    },
+    "visibleClasses": [
+        "person",
+        "bicycle",
+        "car",
+        "motorcycle",
+        "airplane",
+        "bus",
+        "train",
+        "truck",
+        "boat",
+        "traffic light"
+    ],
+    "transform": {
+        "x": 20,
+        "y": 73.5,
+        "scale": 1.0015625,
+        "isDragging": false
+    },
+    "leftSidebarOpen": true,
+    "rightSidebarOpen": true,
+    "flagMode": false
+}
