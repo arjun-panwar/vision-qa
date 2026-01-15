@@ -96,7 +96,3 @@ The `helper_script/` directory contains useful tools:
   ```bash
   python helper_script/detect.py --model yolo11n.pt --source ./my_images --output ./my_predictions
   ```
-
-## License
-
-[MIT License](LICENSE)
