@@ -150,6 +150,67 @@
             text-align: center;
             margin-top: 2rem;
         }
+
+        /* Help Modal */
+        #help-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: var(--bg-panel);
+            margin: 10% auto;
+            padding: 2rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            width: 80%;
+            max-width: 600px;
+            position: relative;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 1rem;
+            right: 1.5rem;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close-btn:hover {
+            color: var(--text-main);
+        }
+
+        .help-list {
+            margin-top: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .help-item h4 {
+            color: var(--accent);
+            margin-bottom: 0.2rem;
+            font-size: 1rem;
+        }
+
+        .help-item p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.4;
+            margin: 0;
+        }
     </style>
 </head>
 
@@ -159,6 +220,15 @@
     <header class="dash-top-bar">
         <div class="dash-title">
             <span>QA Dashboard</span>
+            <span style="font-size: 1.2rem; cursor: pointer; color: var(--text-muted); margin-left: 10px;"
+                title="Dashboard Help" onclick="openHelpModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+            </span>
         </div>
         <div>
             <button onclick="window.location.href='/'" class="btn-primary"
@@ -198,6 +268,48 @@
             <div class="loading-text">Loading statistics...</div>
         </section>
     </main>
+
+    <!-- Help Modal -->
+    <div id="help-modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeHelpModal()">&times;</span>
+            <h2 style="margin-bottom: 1rem; color: var(--text-main);">Dashboard Definition</h2>
+            <div class="help-list">
+                <div class="help-item">
+                    <h4>Reviewed</h4>
+                    <p>Images that have been assigned a QA status (Correct, Incorrect, or Doubtful).</p>
+                </div>
+                <div class="help-item">
+                    <h4>Unreviewed</h4>
+                    <p>Images pending review.</p>
+                </div>
+                <div class="help-item">
+                    <h4>Avg Time</h4>
+                    <p>Average time spent reviewing each image (in seconds).</p>
+                </div>
+                <div class="help-item">
+                    <h4>Correct / Incorrect / Doubtful</h4>
+                    <p>The number of images assigned to each QA status category.</p>
+                </div>
+                <div class="help-item">
+                    <h4>General Comments</h4>
+                    <p>Number of images that have a general (image-level) comment.</p>
+                </div>
+                <div class="help-item">
+                    <h4>BBox Comments</h4>
+                    <p>Total number of comments attached to specific bounding boxes across all reviewed images.</p>
+                </div>
+                <div class="help-item">
+                    <h4>Flagged Img</h4>
+                    <p>Number of images marked with any flag.</p>
+                </div>
+                <div class="help-item">
+                    <h4>Flagged BBox</h4>
+                    <p>Percentage and count of bounding boxes that have been flagged.</p>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="/static/dashboard.js"></script>
 </body>

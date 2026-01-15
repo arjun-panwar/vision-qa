@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 
 class LoadProjectRequest(BaseModel):
@@ -9,8 +10,9 @@ class SaveSettingsRequest(BaseModel):
 class QARequest(BaseModel):
     image: str
     model: str
-    status: str
-    comment: str = ""
-    flags: str = ""  # JSON string of flagged boxes
-    box_comments: str = "" # JSON string of box comments: {box_id: comment}
-    duration: float = 0.0  # Time spent reviewing in seconds
+    status: Optional[str] = None
+    comment: Optional[str] = ""
+    flags: Optional[str] = ""  # JSON string of flagged boxes
+    box_comments: Optional[str] = "" # JSON string of box comments: {box_id: comment}
+    duration: Optional[float] = 0.0  # Time spent reviewing in seconds
+    box_count: Optional[int] = 0 # Total boxes in the image for this model

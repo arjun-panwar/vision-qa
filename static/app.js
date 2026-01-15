@@ -438,6 +438,12 @@ async function updateQAState(status, comment) {
 
     els.qaSavedStatus.textContent = "Saving...";
 
+    // Get Box Count
+    let boxCount = 0;
+    if (state.annotations && state.annotations[selectedModel]) {
+        boxCount = state.annotations[selectedModel].length;
+    }
+
     try {
         const res = await fetch('/api/qa/save', {
             method: 'POST',
@@ -449,7 +455,8 @@ async function updateQAState(status, comment) {
                 comment: comment,
                 flags: JSON.stringify(Array.from(state.flaggedBoxes)),
                 box_comments: JSON.stringify(filterBoxCommentsForModel(selectedModel)),
-                duration: ((Date.now() - state.startTime) / 1000) // Send duration in seconds
+                duration: ((Date.now() - state.startTime) / 1000), // Send duration in seconds
+                box_count: boxCount
             })
         });
 

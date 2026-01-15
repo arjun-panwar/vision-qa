@@ -2,7 +2,48 @@
 
 document.addEventListener("DOMContentLoaded", () => {
     fetchStats();
+    fetchAppConfig();
 });
+
+// Help Modal Logic
+function openHelpModal() {
+    const modal = document.getElementById('help-modal');
+    if (modal) {
+        modal.style.display = 'block';
+    }
+}
+
+function closeHelpModal() {
+    const modal = document.getElementById('help-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Close modal when clicking outside
+window.onclick = function (event) {
+    const modal = document.getElementById('help-modal');
+    if (event.target === modal) {
+        modal.style.display = "none";
+    }
+}
+
+
+async function fetchAppConfig() {
+    try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        if (data.settings && data.settings.app_name) {
+            const titleEl = document.querySelector('.dash-title span');
+            if (titleEl) {
+                titleEl.textContent = `${data.settings.app_name} - Dashboard`;
+                document.title = `${data.settings.app_name} - Dashboard`;
+            }
+        }
+    } catch (e) {
+        console.error("Failed to fetch app config:", e);
+    }
+}
 
 async function fetchStats() {
     try {
@@ -22,7 +63,9 @@ function renderDashboard(data) {
     // 1. Top Level Metrics
     const total = data.total_images || 0;
     const reviewed = data.reviewed_images || 0;
-    const completion = total > 0 ? ((reviewed / total) * 100).toFixed(1) : 0;
+    let completion = total > 0 ? ((reviewed / total) * 100) : 0;
+    if (completion > 100) completion = 100;
+    completion = completion.toFixed(1);
 
     document.getElementById("metric-total-images").innerText = total;
     document.getElementById("metric-reviewed-images").innerText = reviewed;
@@ -87,21 +130,56 @@ function createModelSection(container, modelName, data) {
     header.appendChild(detailsDiv);
     card.appendChild(header);
 
-    // Stats Grid
-    const statsGrid = document.createElement("div");
-    statsGrid.style.display = "grid";
-    // Responsive grid: auto-fit with min width
-    statsGrid.style.gridTemplateColumns = "repeat(auto-fit, minmax(100px, 1fr))";
-    statsGrid.style.gap = "10px";
-    statsGrid.style.marginBottom = "15px";
-    statsGrid.style.marginTop = "10px";
-    statsGrid.style.padding = "10px";
-    statsGrid.style.background = "var(--bg-secondary)";
-    statsGrid.style.borderRadius = "8px";
+    // Progress Bar
+    const total = data.stats.reviewed + data.stats.unreviewed;
+    let completion = total > 0 ? ((data.stats.reviewed / total) * 100) : 0;
+    if (completion > 100) completion = 100;
+
+    const progressContainer = document.createElement("div");
+    progressContainer.style.marginBottom = "15px";
+
+    const progressLabel = document.createElement("div");
+    progressLabel.style.display = "flex";
+    progressLabel.style.justifyContent = "space-between";
+    progressLabel.style.marginBottom = "5px";
+    progressLabel.style.fontSize = "0.9rem";
+    progressLabel.style.color = "var(--text-muted)";
+    progressLabel.innerHTML = `<span>Progress</span><span>${completion.toFixed(1)}%</span>`;
+
+    const progressBarBg = document.createElement("div");
+    progressBarBg.style.width = "100%";
+    progressBarBg.style.height = "8px";
+    progressBarBg.style.backgroundColor = "var(--bg-secondary)";
+    progressBarBg.style.borderRadius = "4px";
+    progressBarBg.style.overflow = "hidden";
+
+    const progressBarFill = document.createElement("div");
+    progressBarFill.style.width = `${completion}%`;
+    progressBarFill.style.height = "100%";
+    progressBarFill.style.backgroundColor = "var(--accent)";
+    progressBarFill.style.transition = "width 0.5s ease";
+
+    progressBarBg.appendChild(progressBarFill);
+    progressContainer.appendChild(progressLabel);
+    progressContainer.appendChild(progressBarBg);
+
+    card.appendChild(progressContainer);
+
+    // Stats Container
+    const statsContainer = document.createElement("div");
+    statsContainer.style.display = "flex";
+    statsContainer.style.flexDirection = "column";
+    statsContainer.style.gap = "15px";
+    statsContainer.style.marginBottom = "15px";
+    statsContainer.style.marginTop = "10px";
+    statsContainer.style.padding = "10px";
+    statsContainer.style.background = "var(--bg-secondary)";
+    statsContainer.style.borderRadius = "8px";
 
     const createStatItem = (label, value, color) => {
         const div = document.createElement("div");
         div.style.textAlign = "center";
+        div.style.flex = "1"; // Distribute evenly
 
         const valDiv = document.createElement("div");
         valDiv.style.fontSize = "1.2rem";
@@ -119,24 +197,59 @@ function createModelSection(container, modelName, data) {
         return div;
     };
 
+    const createRow = () => {
+        const row = document.createElement("div");
+        row.style.display = "flex";
+        row.style.justifyContent = "space-around";
+        row.style.gap = "10px";
+        row.style.paddingBottom = "5px";
+        row.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
+        return row;
+    };
+
     if (data.stats) {
-        // Row 1: General Stats
-        statsGrid.appendChild(createStatItem("Reviewed", data.stats.reviewed, "var(--success)"));
-        statsGrid.appendChild(createStatItem("Unreviewed", data.stats.unreviewed, "var(--text-muted)"));
-        statsGrid.appendChild(createStatItem("Flagged", data.stats.flagged, "var(--error)"));
-        statsGrid.appendChild(createStatItem("Comments", data.stats.comments, "var(--warning)"));
+        // Section 1: Reviewed, Unreviewed, Avg Time
+        const row1 = createRow();
+        row1.appendChild(createStatItem("Reviewed", data.stats.reviewed, "var(--success)"));
+        row1.appendChild(createStatItem("Unreviewed", data.stats.unreviewed, "var(--text-muted)"));
+        const avgTime = typeof data.avg_duration === 'number' ? data.avg_duration.toFixed(2) : data.avg_duration;
+        row1.appendChild(createStatItem("Avg Time (s)", avgTime, "var(--text-primary)"));
+        statsContainer.appendChild(row1);
 
-        // Row 2 (implicitly via grid auto-flow): Results
-        // Get counts safely
+        // Section 2: Correct, Incorrect, Doubtful
+        const row2 = createRow();
         const getCount = (k) => data.counts[k] || data.counts[k.toLowerCase()] || 0;
+        row2.appendChild(createStatItem("Correct", getCount("correct"), "rgba(34, 197, 94, 1)"));
+        row2.appendChild(createStatItem("Incorrect", getCount("incorrect"), "rgba(239, 68, 68, 1)"));
+        row2.appendChild(createStatItem("Doubtful", getCount("doubtful"), "rgba(234, 179, 8, 1)"));
+        statsContainer.appendChild(row2);
 
-        statsGrid.appendChild(createStatItem("Correct", getCount("correct"), "rgba(34, 197, 94, 1)"));
-        statsGrid.appendChild(createStatItem("Incorrect", getCount("incorrect"), "rgba(239, 68, 68, 1)"));
-        statsGrid.appendChild(createStatItem("Doubtful", getCount("doubtful"), "rgba(234, 179, 8, 1)"));
-        statsGrid.appendChild(createStatItem("Avg Time (s)", data.avg_duration, "var(--text-primary)"));
+        // Section 3: General Comments, BBox Comments
+        const row3 = createRow();
+        if (data.stats.comment_details) {
+            row3.appendChild(createStatItem("General Comments", data.stats.comment_details.general, "var(--warning)"));
+            row3.appendChild(createStatItem("BBox Comments", data.stats.comment_details.bbox, "var(--warning)"));
+        } else {
+            // Fallback
+            row3.appendChild(createStatItem("Comments", data.stats.comments, "var(--warning)"));
+        }
+        statsContainer.appendChild(row3);
+
+        // Section 4: Flagged Img, Flagged BBox
+        const row4 = createRow();
+        row4.style.borderBottom = "none"; // Last row
+        row4.appendChild(createStatItem("Flagged Img", data.stats.flagged, "var(--error)"));
+        if (data.stats.bbox_stats) {
+            const percentageVal = `${data.stats.bbox_stats.percentage}%`;
+            const labelText = `Flagged BBox (${data.stats.bbox_stats.flagged}/${data.stats.bbox_stats.total})`;
+            const item = createStatItem(labelText, percentageVal, "var(--error)");
+            item.title = `Flagged: ${data.stats.bbox_stats.flagged} / Total: ${data.stats.bbox_stats.total}`;
+            row4.appendChild(item);
+        }
+        statsContainer.appendChild(row4);
     }
 
-    card.appendChild(statsGrid);
+    card.appendChild(statsContainer);
 
     // Canvas Container
     const canvasContainer = document.createElement("div");
